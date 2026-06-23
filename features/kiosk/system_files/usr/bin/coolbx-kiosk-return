@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# ExecStopPost van de kiosk-sessie: ontgrendel VT-switch en keer terug naar de GNOME-VT.
+# (Eerst unlock, anders weigert chvt door de VT_LOCKSWITCH.)
+set -uo pipefail
+/usr/bin/coolbx-vt-lock unlock 2>/dev/null || true
+/usr/bin/chvt "${1:-2}"

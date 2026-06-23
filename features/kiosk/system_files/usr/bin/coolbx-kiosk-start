@@ -35,8 +35,10 @@ systemd-run --unit=coolbx-kiosk --collect \
   --property=Environment="WLR_RENDERER=pixman" \
   --property=Environment="XKB_DEFAULT_LAYOUT=be" \
   --property=Environment="COOLBX_KIOSK_URL=${URL}" \
-  --property="ExecStopPost=+/usr/bin/chvt ${RETURN_VT}" \
+  --property="ExecStopPost=+/usr/bin/coolbx-kiosk-return ${RETURN_VT}" \
   /usr/bin/sway -c /usr/share/coolbx/kiosk/sway.conf
 
 sleep 1
 chvt "$VT"
+# Blokkeer VT-switch tijdens de toets (S3): Ctrl+Alt+Fn doet niets meer tot de sessie eindigt.
+/usr/bin/coolbx-vt-lock lock || true
