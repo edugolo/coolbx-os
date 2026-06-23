@@ -24,3 +24,4 @@ oude op status "Vervangen door ADR-XXXX").
 | [0014](0014-verificatie-en-autonomie.md) | Verificatie- & autonomie-aanpak tijdens de bouw | Aanvaard |
 | [0015](0015-s2-chromium-managed-storage.md) | S2: Chromium managed-storage + enforcement op Fedora (bevestigd) | Aanvaard |
 | [0016](0016-s3-vt-lockdown.md) | S3: VT-lockdown via VT_LOCKSWITCH (kiosk escape-resistant) | Aanvaard |
+| [0017](0017-s4-update-rollback-powerwash.md) | S4: bootc update/rollback/powerwash haalbaarheid | Aanvaard |

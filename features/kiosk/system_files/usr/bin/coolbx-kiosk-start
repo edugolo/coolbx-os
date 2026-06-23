@@ -15,7 +15,7 @@ URL="${COOLBX_KIOSK_URL:-https://focus-dashboard.edugolo.be/}"
 # Ephemeral home op tmpfs (schoon per sessie — privacy tussen leerlingen).
 # De home MOET bestaan en schrijfbaar zijn, anders kan Chromium z'n crashpad-db niet aanmaken.
 mkdir -p "$KIOSK_HOME"
-mountpoint -q "$KIOSK_HOME" && umount "$KIOSK_HOME" 2>/dev/null || true
+mountpoint -q "$KIOSK_HOME" && umount -l "$KIOSK_HOME" 2>/dev/null || true
 mount -t tmpfs -o "mode=0700,uid=${KIOSK_USER},gid=${KIOSK_USER}" tmpfs "$KIOSK_HOME"
 
 chown "$KIOSK_USER":tty "$KIOSK_TTY" 2>/dev/null || true
@@ -34,6 +34,7 @@ systemd-run --unit=coolbx-kiosk --collect \
   --property=SupplementaryGroups="video input render tty" \
   --property=Environment="WLR_RENDERER=pixman" \
   --property=Environment="XKB_DEFAULT_LAYOUT=be" \
+  --property=Environment="LANG=nl_BE.UTF-8" \
   --property=Environment="COOLBX_KIOSK_URL=${URL}" \
   --property="ExecStopPost=+/usr/bin/coolbx-kiosk-return ${RETURN_VT}" \
   /usr/bin/sway -c /usr/share/coolbx/kiosk/sway.conf

@@ -78,6 +78,34 @@ dev-vm:
       -daemonize -pidfile /tmp/coolbx-vm.pid
     echo "VM gestart (pid $(cat /tmp/coolbx-vm.pid)). 'just vm-shot' voor screenshot, 'just vm-ssh' voor shell."
 
+# Start de dev-VM met een ZICHTBAAR venster (gtk op de wayland-sessie) i.p.v. headless.
+# Je ziet de VM live draaien; screenshots/SSH blijven werken via de monitor-socket en :2222.
+dev-vm-gui:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    test -f output/qcow2/disk.qcow2 || { echo "Bouw eerst: just build-qcow2"; exit 1; }
+    if [ -f /tmp/coolbx-vm.pid ] && kill -0 "$(cat /tmp/coolbx-vm.pid 2>/dev/null)" 2>/dev/null; then
+      echo "VM draait al (pid $(cat /tmp/coolbx-vm.pid)). Doe eerst 'just vm-stop'."; exit 1
+    fi
+    OVMF_CODE=$(ls /usr/share/edk2/ovmf/OVMF_CODE.fd /usr/share/OVMF/OVMF_CODE.fd 2>/dev/null | head -1 || true)
+    OVMF_VARS_SRC=$(ls /usr/share/edk2/ovmf/OVMF_VARS.fd /usr/share/OVMF/OVMF_VARS.fd 2>/dev/null | head -1 || true)
+    [ -n "$OVMF_CODE" ] || { echo "OVMF niet gevonden — installeer edk2-ovmf"; exit 1; }
+    cp -f "$OVMF_VARS_SRC" output/ovmf_vars.fd
+    rm -f /tmp/coolbx-mon.sock
+    export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
+    export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/1000}"
+    qemu-system-x86_64 \
+      -enable-kvm -machine q35 -cpu host -m 4096 -smp 4 \
+      -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
+      -drive if=pflash,format=raw,file=output/ovmf_vars.fd \
+      -drive file=output/qcow2/disk.qcow2,if=virtio,format=qcow2 \
+      -device virtio-vga -display gtk,show-cursor=on \
+      -monitor unix:/tmp/coolbx-mon.sock,server,nowait \
+      -netdev user,id=n0,hostfwd=tcp:127.0.0.1:2222-:22 -device virtio-net-pci,netdev=n0 \
+      -serial file:output/serial.log \
+      -name "Coolbx OS — dev-VM" \
+      -pidfile /tmp/coolbx-vm.pid
+
 # Maak een screenshot van de VM (QEMU-monitor screendump → PNG die de agent kan bekijken).
 vm-shot out="output/shot.png":
     python3 scripts/vm-shot.py /tmp/coolbx-mon.sock "{{ out }}"
@@ -112,6 +140,22 @@ check:
     chk "nl_BE locale"           'grep -q nl_BE /etc/locale.conf'
     [ $fail -eq 0 ] && echo "ALLE CHECKS OK" || echo "ER ZIJN CHECKS GEFAALD"
     exit $fail
+
+# Push een feature's system_files LIVE in de draaiende VM via `bootc usr-overlay` (geen herbouw/reboot).
+# Snelle iteratie: bewerk features/<feat>/system_files -> `just vm-sync <feat>` -> `just vm-kiosk`.
+vm-sync feat="kiosk":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    sshc(){ sshpass -p tester ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2222 tester@127.0.0.1 "$@"; }
+    echo ">> usr-overlay activeren + '{{ feat }}' live syncen naar /usr+/etc"
+    sshc 'echo tester | sudo -S bootc usr-overlay >/dev/null 2>&1 || true'
+    ( cd "features/{{ feat }}/system_files" && tar -cf - -- * ) | sshc 'cat > /tmp/coolbx-sync.tar'
+    sshc 'echo tester | sudo -S tar -C / --no-same-owner --no-overwrite-dir -xf /tmp/coolbx-sync.tar && echo "OK: {{ feat }} live (transient tot reboot)"'
+
+# Start de kiosk in de draaiende VM (na vm-sync). Stop een lopende kiosk eerst.
+vm-kiosk url="file:///usr/share/coolbx/kiosk/placeholder.html":
+    sshpass -p tester ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2222 tester@127.0.0.1 \
+      "echo tester | sudo -S sh -c 'systemctl stop coolbx-kiosk 2>/dev/null; systemctl reset-failed coolbx-kiosk 2>/dev/null; umount -l /var/lib/coolbx-kiosk 2>/dev/null; coolbx-vt-lock unlock 2>/dev/null; sleep 2; env COOLBX_KIOSK_URL={{ url }} /usr/bin/coolbx-kiosk-start'"
 
 # Stop de dev-VM.
 vm-stop:

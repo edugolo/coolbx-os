@@ -13,7 +13,7 @@
     "tooltip": false
   },
   "clock": {
-    "format": "{:%A %e %B  ·  %H:%M}",
+    "format": "{:L%A %e %B  ·  %H:%M}",
     "locale": "nl_BE.UTF-8",
     "tooltip": false
   },

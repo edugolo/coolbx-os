@@ -28,6 +28,23 @@ ROOTFS=ext4 just build-qcow2                                 # FOG-vriendelijke 
 - **CLI:** `just vm-ssh '<cmd>'` (bv. `systemctl is-active gdm`, `bootc status`, `cat /etc/os-release`).
 - **Serieel logboek:** `output/serial.log`.
 
+## Snel itereren zonder herbouw (`bootc usr-overlay`)
+Een herbouw duurt ~10 min; voor script-/config-wijzigingen aan een **feature** kan het veel sneller via een
+transiente schrijfbare `/usr`-overlay in de draaiende VM:
+```bash
+just dev-vm            # (of dev-vm-gui) boot de VM één keer
+# bewerk features/<feat>/system_files/...
+just vm-sync kiosk     # bootc usr-overlay + push de feature live naar /usr+/etc (transient tot reboot)
+just vm-kiosk          # (her)start de kiosk met de live-gesyncte bestanden
+just vm-shot           # screenshot
+```
+De repo blijft de bron van waarheid; de volgende echte `build-qcow2` bakt de wijzigingen in. usr-overlay-wijzigingen
+verdwijnen bij reboot.
+
+## Zichtbaar VM-venster
+`just dev-vm-gui` opent een echt qemu-venster (`-display gtk`) op je wayland-sessie i.p.v. headless — handig om live
+mee te kijken. SSH (`:2222`) en `vm-shot` blijven werken via de monitor-socket.
+
 ## Dev vs prod
 Dev-builds zetten een autologin-testuser (`tester`/`tester`). Prod: `just build-prod` (`ENABLE_FIRSTBOOT_USER=0`)
 → geen testuser, geen autologin. CI moet falen als een prod-build de dev-user bevat.
