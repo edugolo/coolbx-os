@@ -1,0 +1,14 @@
+[Unit]
+Description=Coolbx OS first-boot dev test user
+ConditionPathExists=/etc/coolbx/enable-firstboot-user
+ConditionPathExists=!/var/lib/coolbx/firstboot-user-done
+After=local-fs.target
+Before=gdm.service systemd-user-sessions.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/coolbx-firstboot-user.sh
+
+[Install]
+WantedBy=multi-user.target
