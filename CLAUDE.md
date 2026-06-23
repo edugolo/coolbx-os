@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status
 
-Er is nog geen code/build-systeem/tests, **maar de richting en architectuur liggen nu vast** in **`docs/ROADMAP.md`** — dat is de gezaghebbende, levende projectbron. **Lees `docs/ROADMAP.md` eerst** (en `HANDOFF.md` voor de oorspronkelijke context/harde feiten). De vroeger-open beslissingen zijn beslist: beheerde **fedora-bootc** + GNOME-laptop die op aanvraag in een vergrendelde **sway**-kiosk (+waybar) schakelt met RPM-Chromium + de force-installed Focus-extensie; examenintegriteit ligt op de Focus-server (niet een onbreekbare OS-jail); branding = **play↔focus**-dualiteit (géén schild); uitrol via interactieve ISO/FOG; updates via greenboot/bootc + powerwash.
+Er is nog geen code/build-systeem/tests, **maar de richting en architectuur liggen nu vast** in **`docs/ROADMAP.md`** — dat is de gezaghebbende, levende projectbron. **Lees `docs/ROADMAP.md` eerst** (+ de ADRs in `docs/adr/` voor het *waarom* van elke beslissing); de harde feiten van het integratiecontract staan verderop in dit bestand. De vroeger-open beslissingen zijn beslist: beheerde **fedora-bootc** + GNOME-laptop die op aanvraag in een vergrendelde **sway**-kiosk (+waybar) schakelt met RPM-Chromium + de force-installed Focus-extensie; examenintegriteit ligt op de Focus-server (niet een onbreekbare OS-jail); branding = **play↔focus**-dualiteit (géén schild); uitrol via interactieve ISO/FOG; updates via greenboot/bootc + powerwash.
 
 Dev-omgeving: passwordless `sudo podman` is ingesteld (`/etc/sudoers.d/coolbx-os-dev`) voor bootc-image-builder, zodat de build→VM-loop autonoom draait (qemu-direct + QEMU-monitor `screendump` voor screenshots).
 

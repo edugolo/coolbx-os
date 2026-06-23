@@ -1,337 +1,266 @@
-# Coolbx OS — productie-roadmap
+# Coolbx OS — productie-roadmap (v2)
 
-> Status: **ter review.** Dit is het uitgewerkte plan uit de plansessie (2026-06-23),
-> nog niet uitgevoerd — er is nog niets in de repo aangemaakt. Lees na, corrigeer,
-> en dan starten we met Fase 0.
+> Status: **uitvoeringsklare blauwdruk.** v2 verwerkt een adversariële 3-lens review (techniek, security,
+> operationeel) + drie richtingsbeslissingen. Code is nog niet geschreven; de repo bevat docs.
+> Lees ook `CLAUDE.md` (oriëntatie) en de ADRs in `docs/adr/` (het *waarom*). Eerdere versies en de originele HANDOFF-brief zitten in de git-historie.
 
 ## Context
 
-Coolbx OS is de "device floor": een vergrendeld Fedora **bootc**-OS dat van een gewone
-laptop het equivalent van een managed Chromebook maakt, als harde onderlaag voor
-waterdichte toetsafname met **Coolbx Focus**. De repo staat aan nul (enkel `HANDOFF.md`);
-een bevroren POC in `/home/johan/code/coolbx-poc/coolbx-os` levert herbruikbare patronen
-maar moet vers, schoon en productie-ready herbouwd worden (Electron eruit, `schoolbx`→`coolbx`,
-Chromium-policy erin).
+Coolbx OS = de "device floor": een vergrendeld Fedora **bootc**-OS dat van een schoollaptop het equivalent
+van een managed Chromebook maakt, als onderlaag voor toetsafname met **Coolbx Focus**. Vers herbouwd vanuit
+de bevroren POC (`/home/johan/code/coolbx-poc/coolbx-os`): Electron eruit, `schoolbx`→`coolbx`, Chromium-policy erin.
 
-Dit plan legt de architectuur en fasering vast op basis van actueel onderzoek (juni 2026)
-en de richtingskeuzes die in de plansessie zijn gemaakt.
+### Eerlijke framing (uit de security-review — belangrijk)
 
-### Vastgelegde keuzes (plansessie)
+Coolbx OS beveiligt **het toestel, niet de ruimte**. Tweede toestel/telefoon/papier/kamergenoot blijven
+**leerkracht-/proctoring-werk** (precies wat Focus claimt: "met de leerkracht erbij"). Examenintegriteit is
+**gelaagd**: kiosk-jail + Chromium-policy (OS) + detectie/gegate-heropstart (Focus-server) + leerkracht-aanwezigheid.
+`kioskMode=true` uit managed-storage is **cosmetisch** (toont enkel een wachtscherm) — alle echte enforcement zit
+in de **Chromium-policy-set** + de **kiosk-jail**. v1 = "managed device + afleiding-/ontsnappingspreventie"; de
+harde anti-spoofing/fysieke hardening volgt als fast-follow (zie *Security & dreigingsmodel*).
+
+### Richtingsbeslissingen (plansessie)
 
 | Knoop | Keuze |
 |---|---|
-| **Toestelmodel** | Beheerde GNOME-laptop die **op aanvraag** in een vergrendelde kiosk-sessie schakelt |
-| **Base** | `quay.io/fedora/fedora-bootc` (minimaal, bootc-native, "zo clean mogelijk"); Universal Blue als leerbron/fallback bij hardware-problemen |
-| **Skelet** | Containerfile + Justfile in de stijl van `ublue-os/image-template`, gevoed met geporte POC-patronen — geen BlueBuild |
-| **Kiosk-compositor** | **sway** + waybar (minimale systeem-UI: wifi/batterij/klok), Chromium in kiosk; aparte Wayland-sessie op eigen VT |
-| **Browser** | RPM-**Chromium** (Fedora-repo), geen Flatpak, geen Electron |
-| **Examen-integriteit** | Op de **Focus-laag**: leerling mag bewust afsluiten (waarschuwing "ingediend?"); herjoinen enkel via **herneemcode + toestemming leerkracht** (ook bij crash/wifi-verlies). OS heeft géén teacher-only hard-unlock nodig |
-| **Toets starten** | Leerling start zelf via een "Toetsmodus"-launcher in GNOME |
-| **Uitrol** | Interactieve Anaconda-ISO bouwt een **master** → **generaliseren** → **FOG capture → FOG deploy** voor massauitrol → bootc **OTA** neemt onderhoud over. Geen `bootc switch`-dans in productie |
+| **Toestelmodel** | Beheerde GNOME-laptop die op aanvraag in een vergrendelde **sway**-kiosk schakelt |
+| **Account-model** | **Pilot: gedeeld toestel + autologin-gastsessie** (reset bij logout/reboot). Breed model beslist na pilot-spike |
+| **Base-image** | **Beslist na base-spike**: fedora-bootc minimaal vs `ublue-os/base-main`, beide bouwen + in VM vergelijken |
+| **Kiosk-compositor** | sway + waybar (wifi/batterij/klok), aparte Wayland-sessie op eigen VT |
+| **Browser** | RPM-Chromium (Fedora-repo), geen Flatpak, geen Electron |
+| **Examen-integriteit** | Focus-server-laag (bewust afsluiten + herneemcode) + leerkracht; geen onbreekbare OS-jail |
+| **Security-ambitie v1** | **Pilot-eerlijk**: kiosk-jail + Chromium-policy nu; Secure Boot/firmware-pw/enrollment-credential als fast-follow |
+| **Uitrol** | Interactieve Anaconda-ISO + FOG-kloon (FOG niet-prioritair); canary `:testing`→`:stable` |
 
-### Architectuur in één beeld
+### Architectuur
 
 ```
-Boot → GDM → beheerde GNOME-sessie (user: leerling)         [VT2, dagelijks gebruik]
-                 │
-                 │  leerling klikt "Toetsmodus" (launcher → pkexec coolbx-kiosk-start)
+Boot → GDM autologin → beheerde GNOME-gastsessie (reset bij logout)      [VT2, "play"/vrije modus]
+                 │  leerling klikt "Toetsmodus" → pkexec coolbx-kiosk-start
                  ▼
-        transiente systemd-sessie (user: kiosk) op VT4        [vergrendelde toets-sessie]
-        sway (keybinds gestript, VT-switch dicht)
-          └─ waybar (wifi / batterij / klok / "Sessie afsluiten")
-          └─ chromium --kiosk  →  Focus student-extensie (force-installed)
-                                   managed-storage: serverUrl + kioskMode=true
-                 │
-                 │  bewuste exit (waybar-knop of extensie-flow) → confirm → sessie stopt
-                 ▼
-        ExecStopPost: chvt 2 → terug naar GNOME
-        (herjoinen vereist herneemcode via Focus/leerkracht)
+        transiente systemd-sessie (user: kiosk, ephemeral home op tmpfs)  [VT4, "focus"/toets]
+        sway (keybinds gestript, IPC-socket afgeschermd, VT-switch dood op logind-niveau)
+          └─ waybar (wifi / batterij / klok / "Sessie afsluiten" + OS-confirm)
+          └─ chromium --kiosk + ENFORCEMENT-policy → Focus-extensie (force-installed)
+                 │  bewuste exit → OS-confirm → `systemctl stop coolbx-kiosk`
+                 ▼  ExecStopPost: chvt 2 → terug naar GNOME   (herjoinen = herneemcode via Focus)
 ```
 
-Examenintegriteit = detectie + gegate heropstart op de Focus-server, niet een onbreekbare
-OS-jail. De OS-kiosk voorkomt *afleiding en ontsnapping binnen de sessie* (geen andere apps,
-geen VT-hop, geen terminal), maar staat een *bewuste* exit toe.
-
 ---
 
-## Lokale dev-workflow (VM) — expliciet
+## Cross-cutting ontwerp
 
-Doel: een **snelle, één-commando inner loop** zodat we elke wijziging in een VM kunnen zien
-(zowel GNOME als de sway-kiosk grafisch), zonder echte hardware.
+### Beslissingen vastleggen (ADR)
+Niet-triviale keuzes worden vastgelegd als **ADR** in `docs/adr/` (MADR-lite: context → beslissing → gevolgen →
+alternatieven). ROADMAP = het levende plan; ADRs = bevroren beslissingen met hun *waarom*. Tijdens autonome
+uitvoering krijgt **elke spike-uitkomst en architectuurkeuze** een ADR, zodat het spoor auditeerbaar blijft.
+Reeds genomen beslissingen zijn back-filled (zie `docs/adr/README.md`).
 
-**Hoofd-loop (grafisch, volledige disk):** geport uit de POC.
-```
-just build            # podman build van de Containerfile (dev-image, met testuser)
-just build-qcow2      # bootc-image-builder → output/qcow2/disk.qcow2
-just run-vm-qcow2     # qemux/qemu-container, VNC in browser (localhost:8006) + SSH op :2222
-```
-- Dev-builds zetten een **autologin-testuser** (`ENABLE_FIRSTBOOT_USER=1`, bv. `tester/tester`)
-  zodat je meteen in GNOME landt en de Toetsmodus-launcher kan klikken.
-- `GPU=Y`/`TPM=Y` + VNC tonen écht de grafische sessie → we kunnen de kiosk visueel testen.
-- SSH-forward (`:2222`) om in de VM te poken (`chrome://policy` checken kan via een terminal
-  + `chromium`-debug, of gewoon grafisch in de VNC).
+### Lokale dev-workflow (VM) — autonoom & machine-leesbaar
+> De POC opende browser-VNC voor een mens — **onbruikbaar voor een autonome agent**. v2 gebruikt qemu-direct.
+- **Build:** `podman build` (rootless). **Disk:** bootc-image-builder via `sudo podman` (passwordless ingesteld).
+- **VM-run:** `qemu-system-x86_64` **direct** (rootless, `/dev/kvm`), met `-monitor` (unix socket) + SSH-forward `:2222`.
+- **Ogen:** QEMU-monitor **`screendump out.ppm`** → Pillow → PNG die de agent leest. **Handen:** SSH + monitor `sendkey`.
+- **Verificaties zijn machine-leesbaar:** SSH-CLI-checks (`bootc status`, `systemctl`, journald, policy-files) +
+  screendump-PNG's. Browser-only checks (`chrome://policy`) worden vervangen door: policy-JSON valideren +
+  headless `chromium` + een test-extensie die `chrome.storage.managed.get()` naar een bestand schrijft.
+- Justfile: `build`, `build-prod`, `build-qcow2 [--rootfs]`, `dev-vm` (qemu-direct), `vm-ssh`, `vm-shot`, `lint`.
+- `docs/DEVELOPING.md`: één pagina dev-loop. Dev-vs-prod strikt gescheiden; **CI-guard** faalt als `ENABLE_FIRSTBOOT_USER=1` in een prod-build lekt.
 
-**Snelle loop (headless, geen disk-build):** voor niet-grafische iteraties (policy-JSON,
-units, scripts) is `podman-bootc` lichter — het draait de container direct als VM zonder de
-BIB-stap. Toevoegen als `just dev-quick` / documenteren.
+### Modulariteit (feature-model) — concreet mechanisme
+> Een Containerfile kan **niet** "itereren" over een build-arg (geen loops).
+- Eén `build_files/install-features.sh "$FEATURES"` (bash) dat over de feature-namen loopt en per feature
+  `features/<naam>/install.sh` draait; één `RUN ... install-features.sh "${FEATURES}"` in de Containerfile.
+- Elke feature self-contained + single-purpose (`features/<naam>/{install.sh, system_files/}`).
+- **Twee lagen:** build-time features (image-capabilities: kiosk, branding) vs runtime **ansible-pull** (per-rol config).
+  Kernconfig + Chromium-policy zitten in het **image**, niet in ansible (anti-drift).
+- **Standalone-principe ([ADR-0012](../docs/adr/0012-standalone-os-focus-optioneel.md)):** de OS-kern staat los van Focus.
+  Alle Focus-binding (extensie, managed-storage, device-auth) zit in een **optionele `focus`-feature**; een kale Coolbx OS
+  heeft geen Focus-afhankelijkheid of -secrets. Coolbx OS is ook bruikbaar als generieke kiosk-/device-floor-distro.
 
-**Te leveren in Fase 0–1 (developer experience):**
-- `just`-recepten: `build`, `build-prod`, `build-qcow2`, `run-vm-qcow2`, `lint`, `format` (port).
-- Een korte `docs/DEVELOPING.md`: één-pagina "hoe bouw & test ik lokaal", inclusief de VNC-URL,
-  SSH-toegang, en hoe je de Chromium-policy in de VM verifieert.
-- Duidelijke scheiding **dev vs prod** image (testuser alleen in dev; prod = `build-prod`,
-  `ENABLE_FIRSTBOOT_USER=0`).
-- Optioneel: `just vm-ssh` helper en een `just clean` (port) om build-artefacten op te ruimen.
+### Identiteit, account & reset (pilot)
+- **Pilot = gedeeld toestel, GDM-autologin naar een beheerd gastprofiel** dat bij logout/reboot reset → lost
+  én "wie logt in" én "reset tussen leerlingen" op zonder wachtwoord-/SSO-moeras. Geen persistente persoonlijke data in pilot.
+- Drie reset-niveaus expliciet: (a) **per-toets** = ephemeral kiosk-home (tmpfs); (b) **per-leerling/lesuur** =
+  gast-logout wist het GNOME-profiel; (c) **factory** = powerwash (`bootc install reset`, jaarlijks/overdracht).
+- `[te bevestigen na pilot]` breed model: persoonlijk lokaal account vs centrale SSO (Entra/Google/LDAP) +
+  home-provisioning. Niet bouwen vóór pilot-feedback.
 
-Randvoorwaarden op de dev-machine (Fedora): `podman`, `just`, `qemu`/KVM (`/dev/kvm`),
-`jq`, en `bootc-image-builder` wordt als container gepulld. Documenteren in `DEVELOPING.md`.
+### Netwerk & connectiviteit *(nieuw — operationele showstopper)*
+- **Schoolwifi/eduroam (WPA2-Enterprise):** NetworkManager **system connections** in het image (of via ansible),
+  certificaten meegeleverd; niet afhankelijk van leerling-input.
+- **Captive portals:** afhandelen op de **GNOME-laag** (connectivity-check + portal-helper) **vóór** de kiosk start;
+  de kiosk start pas bij bevestigde connectiviteit. Egress-lockdown mag de portal niet blokkeren.
+- **Egress-lockdown (kiosk):** nftables met **uid-match op de kiosk-user**, allowlist op focus-domeinen, vaste
+  DNS-resolver, al het andere **fail-closed** drop. Bij verlies van focus-api → kiosk toont "geen verbinding —
+  toets gepauzeerd" (vervangt webcontent), laat de leerling niet vrij in een offline browser.
+- `[te bevestigen]` mag de leerling in vrije modus zelf een SSID/wachtwoord kiezen (botst met dconf-lockdown)?
+- Documenteer proxy/captive-portal-gedrag op schoolnetwerken.
 
----
+### Vrije modus — capability-matrix *(nieuw — was enkel branding-concept)*
+Concreet gedrag (pilot-defaults, `[te bevestigen]`):
+| Capability | Pilot-default |
+|---|---|
+| Apps | Chromium + bestandsbeheer + basis (geen terminal voor leerling) |
+| Web-filtering | Geen (open) in vrije modus `[te bevestigen]` |
+| USB-opslag | Lezen toegestaan in vrije modus, geblokkeerd in kiosk `[te bevestigen]` |
+| Schrijfbare opslag | Ephemeral (gast-profiel) |
+| Printen | `[te bevestigen]` — zo ja via ansible-printerconfig; anders expliciet "geen printen by design" |
+Vrije modus = "play": gewoon-toestel-gevoel; kiosk = "focus": vergrendeld. Het OS draagt beide.
 
-## Modulariteit (feature-model)
+### Accessibility *(nieuw — wettelijk in onderwijs)*
+- a11y-tools beschikbaar in kiosk én GNOME: Orca (schermlezer), vergroting, hoog-contrast.
+- a11y-voorkeuren mogen **niet** door de ephemeral wipe verdwijnen → a11y-config buiten het gewiste profiel
+  (systeem-dconf-defaults of een persistent a11y-laag). "Alle keybinds verwijderen" in sway mag a11y-sneltoetsen niet killen.
+- Gedeelde naad: de Focus-toets-UI moet zelf a11y-vriendelijk zijn.
 
-De POC voegde zaken modulair toe via `features/<naam>/{install.sh, system_files/}`, getoggled
-door een Containerfile-blok te (un)commenten. **Het concept is goed; de uitvoering was ruw.** Behouden,
-maar formaliseren:
-- **Toggle via build-arg** `FEATURES="kiosk branding ..."` die de Containerfile itereert
-  (reproduceerbaar, CI kan varianten bouwen), i.p.v. blokken comment/uncomment.
-- Elke feature **self-contained + single-purpose** (niet zoals de POC-`focus-mode` die cage + Electron + files mengde).
-- **Twee-lagen-model:** build-time *features* = capabilities die ín het image moeten (kiosk, branding, optionele software);
-  runtime *ansible-pull* = per-toestel/rol-config (leerling/leerkracht/admin). Niet alles is een feature — rolverschillen horen bij ansible.
-- **Niet over-engineeren:** geen BlueBuild-achtig modulesysteem nodig; een dunne conventie + build-arg volstaat.
+### Kiosk-gebruiker & bestandssysteem
+- **Ephemeral, gegarandeerd schoon:** wipe in **`ExecStartPre`** (idempotent, dekt ook abrupte vorige stop) —
+  niet enkel ExecStopPost. Chromium `--user-data-dir`, `--disk-cache-dir`, `TMPDIR` en `$HOME` allemaal op **tmpfs** onder `/run`.
+- **Geen (of encrypted) swap** → geen profielresten op schijf.
+- Aparte generieke `kiosk`-user, los van de GNOME-gast. Identiteit komt van Focus (join/herneemcode).
 
----
+### Updates, rollback & powerwash (eindgebruiker, geen terminal)
+- **Updates onzichtbaar/automatisch**; **mask** `bootc-fetch-apply-updates.timer`, eigen off-hours timer met
+  `Persistent=true` (toestellen die 's nachts uit staan → inhalen bij volgende boot/idle).
+- **Greenboot (greenboot-rs)** = vangnet: health-checks **lokaal only** ("greeter start", "kiosk-unit start") —
+  **nooit** "focus-api bereikbaar" (externe outage zou de hele vloot doen terugrollen). Auto-rollback na N gefaalde boots.
+- **Knoppen zonder terminal:** oneshot-units `coolbx-update`/`coolbx-rollback`/`coolbx-powerwash` achter een polkit
+  `manage-units`-rule (uupd-patroon); GTK-knopje of Cockpit doet `systemctl start`.
+- **Powerwash:** `bootc install reset --experimental --apply` (verse `/etc`, lege `/var`); **fallback** gedocumenteerd
+  als de experimentele knop ontbreekt (handmatig `/var` wipen + redeploy). De generaliseer-logica (FOG) deelt dit.
+- **GRUB:** geauthenticeerde recovery (zie hardening), korte timeout zodat rollback-entry bereikbaar blijft.
 
-## Branding
+### Security & dreigingsmodel *(reframe — pilot-eerlijk)*
+**v1-enforcement (nu):**
+- **Chromium ENFORCEMENT-policy-set** (first-class, in Fase 2, niet "waar nodig"): `DeveloperToolsAvailability: 2`,
+  `IncognitoModeAvailability: 1`, `DownloadRestrictions`, `URLBlocklist:["*"]` + `URLAllowlist` op focus-domeinen,
+  `BrowserGuestModeEnabled: false`, `AllowFileSelectionDialogs: false`, externe protocol-handlers blokkeren, `file://`/`chrome://` dicht.
+- **Kiosk-jail:** VT-switch dood op **logind/kernel-niveau** (geen extra getty's op de kiosk-VT; bevestig dat
+  Ctrl+Alt+F1..F12 dood is **tijdens een Chromium-crash**, niet leunen op de Ozone-keybind-quirk); sway zonder
+  enige `bindsym` (ook defaults unbinden) en **`SWAYSOCK` afgeschermd** (`swaymsg exec` = terminal-spawn); externe
+  monitors mirror/disable; klok niet leerling-instelbaar (polkit/dconf op timedate1 + geforceerde NTP).
+- **GNOME-laag** mag tijdens een actieve kiosk niet bereikbaar zijn (geen VT-hop); polkit-regel strikt op één
+  exacte action-id, launcher root-owned, geen leerling-args naar `systemd-run`.
+- **Offline = fail-closed** (zie netwerk). Server is altijd tijd-/deadline-autoriteit (nooit clientklok).
 
-Het merk is een **familie-systeem** (uit de masters in `coolbx-focus/branding/svg`): een ouder-merk
-`coolbx-mark` (inkt-tegel + crème "C") met per product een eigen **glyph** (Focus = camera-viewfinder
-+ amber focuspunt). Tokens: **inkt `#2b2620`**, **papier `#faf8f3`**, **amber `#e8902a` is gereserveerd voor Focus**,
-wordmark lowercase in **Inter Bold** ("coolbx" inkt + productwoord in accent), gegenereerd uit SVG via `generate.sh`.
+**Fast-follow (na pilot, vóór "waterdicht"-claim):**
+- **Anti-live-USB/fysiek:** UEFI Secure Boot AAN + **firmware-wachtwoord** + bootmenu-lock; **GRUB-wachtwoord** op edit;
+  `kernel.sysrq=0`; Ctrl+Alt+Del masken. (Zonder firmware-pw is Secure Boot uit te zetten → alles waardeloos.)
+- **Anti-spoofing via HMAC-handshake ([ADR-0013](../docs/adr/0013-anti-spoofing-hmac-per-device.md)):** hergebruik
+  Focus' bestaande **HMAC-SHA256 handshake-schema**, maar met een **per-toestel-secret** dat bij enrollment wordt
+  uitgedeeld en **root-only** (`0600 root`) bewaard, gesigneerd door een **OS-agent** (native-messaging-host, `allowed_origins`
+  exact op de extension-ID) en geverifieerd door de Focus-server tegen een **allowlist** (met revocatie). **Geen gedeeld
+  build-time secret** (extraheerbaar/per-toestel-loos). Veel lichter dan TPM/PKI en sluit de casual-spoof-gap. Restrisico
+  (secret van schijf bij fysieke diefstal) → **TPM-sealing/FDE** hieronder.
+- **Credential-bescherming:** TPM-sealing (en/of heroverweeg "geen FDE" — een credential op onversleutelde schijf is offline te stelen).
+- `signing/policy.json`: `default: reject` + `sigstoreSigned`/`matchRepository` + **`keyPaths` (2 keys)** voor rotatie;
+  **key-backup/recovery** gedocumenteerd (totaalverlies → vloot kan niet meer updaten).
 
-**Coolbx OS — eigen eigenheid, zelfde toon:**
-- ⚠️ **Geen schild/slot-metafoor.** De OS is *niet* enkel een toets-/vergrendeltoestel — het moet ook in **vrije modus**
-  bruikbaar zijn. Branding mag dus géén "security/lockdown" uitstralen.
-- **Concept: de play↔focus-dualiteit** (waar de POC al mee speelde). Het toestel kent een vrije **play**-modus en een
-  geconcentreerde **focus**-modus; de OS is het *platform/de vloer* die beide draagt. Glyph-richtingen: een dualiteit/toggle
-  tussen open (play) en gefocust, of de coolbx-ouder-"C"-tegel als platform-merk waarop de modi leven.
-- **Eigen accent** (sibling van amber, want amber = Focus) — maar **vriendelijk/neutraal, niet "secure"**. Eventueel zelfs
-  een **dual-accent** (play-hue naast focus-amber). Open te kiezen.
-- Wordmark **"coolbx os"** (inkt + os-accent), exact parallel aan "coolbx focus".
+**Extensie-permissies** (`<all_urls>`, `scripting`, `tabCapture`, `declarativeNetRequest`): blast-radius is groot →
+OS-egress-lockdown staat **onafhankelijk** van de extensie (defense-in-depth). `update.xml`/dashboard = trusted compute base (pinnen).
 
-**Wow-touchpoints (impact-volgorde) — waar de OS premium moet voelen:**
-1. **Plymouth boot-splash** (logo + spinner) — het eerste wow-moment bij power-on.
-2. **GDM-login** (logo, achtergrond, accent).
-3. **Desktop**: wallpaper light/dark + **GNOME-accentkleur** (GNOME 47+) + thema.
-4. **Kiosk**: waybar-styling (CSS, kan prachtig) + branded toets-splash terwijl Chromium laadt + de afsluit-dialoog.
-5. **OS-identiteit**: `/etc/os-release` (`NAME="Coolbx OS"`, `PRETTY_NAME`, `LOGO`, `HOME_URL`, `ANSI_COLOR`).
-6. **Anaconda-installer** (ISO-branding); secundair: GRUB-thema, lockscreen.
+### Toestel-attestatie — gelaagd
+> Scope-bewaking: een autonome agent bouwt geen attestatie vóór de basis-kiosk e2e werkt.
+- **v1 (fast-follow, concreet & licht):** HMAC-handshake met **per-toestel-secret** (zie *Security fast-follow* +
+  [ADR-0013](../docs/adr/0013-anti-spoofing-hmac-per-device.md)). Hergebruikt Focus' schema; geen TPM/PKI nodig.
+- **fast-follow hardening:** TPM-sealing van het per-toestel-secret + FDE tegen fysieke schijf-diefstal.
+- **v2-visie:** diepe remote-attestatie (TPM-quote/measured boot) — later, gedeeld contract met Focus-server.
+- **"Eén geheel" = de Focus-server** (enige runtime-verifier) + wij als operator, **niet** een gefuseerde build/deploy
+  of een gedeeld build-time secret (zou de OS aan Focus koppelen — botst met [ADR-0012](../docs/adr/0012-standalone-os-focus-optioneel.md)).
 
-**Aanpak:** één brand-token-bron + een `generate.sh`-pijplijn (zoals Focus al heeft) die álle OS-assets emit;
-ingebouwd als een **"branding"-feature** (haakt aan modulariteit hierboven). Eerlijk: de hero-art (glyph, wallpaper)
-is designwerk — ik scaffold de pijplijn + alle touchpoints en hergebruik de masters; de finale art verfijnen we.
-*Ik kan een eerste SVG-pass van de OS-glyph + wordmark maken in de familie-stijl als startpunt.*
-
----
-
-## Kiosk-gebruiker & bestandssysteem
-
-> **Stond nog niet expliciet in het plan — terecht punt.** De POC maakte `/home/focus` net *persistent*
-> (tmpfiles `d /home/focus 0750`). Voor een toets-kiosk willen we het **omgekeerde**.
-
-- **Ephemeral, schoon per sessie:** de kiosk-user-home + Chromium-profiel op **tmpfs** (Chromium `--user-data-dir`
-  onder `/run`, of een tmpfs-mount op de kiosk-home, of wipe in `ExecStartPre`/`ExecStopPost`). Elke toets start
-  *pristine*: geen profiel-carryover, geen gecachte logins, **privacy tussen leerlingen**.
-- Op bootc zijn `/home` en `/var` standaard persistent → dit moeten we **expliciet** ephemeral maken.
-- **Aparte `kiosk`-user**, los van de GNOME-leerling-identiteit (die blijft persistent voor dagelijks gebruik).
-  De identiteit vóór de toets komt van **Focus** (join/herneemcode), niet van de OS-user → de OS-user mag generiek + wegwerpbaar zijn.
-- Sluit aan op integriteit: een toets laat geen sporen na op het toestel.
-
----
-
-## Updates, rollback & powerwash (eindgebruiker-UX)
-
-> Eindgebruikers doen **nooit** `bootc upgrade`/`rollback` in een terminal. In de bootc-wereld bestaat er géén
-> kant-en-klare ChromeOS-Powerwash-knop of GUI-rollback — we assembleren volwassen bouwstenen.
-
-- **Updates = onzichtbaar & automatisch.** Stuur ze zelf via een off-hours timer (Fase 5) en **mask**
-  `bootc-fetch-apply-updates.timer` zodat auto-updates niet vechten met handmatige rollback. Gebruiker doet niets.
-- **Vangnet = greenboot (greenboot-rs voor bootc).** Health-checks na elke update; na N gefaalde boots **auto-rollback**
-  naar de vorige deployment. Eigen `required.d`-checks: "kiosk/greeter start" + "focus-api bereikbaar". Zit **niet**
-  standaard in Fedora/UB bootc → zelf toevoegen + enablen. Dé robuustheidspijler voor onbeheerde toestellen.
-- **Knoppen zonder terminal (uupd-patroon):** oneshot-units `coolbx-update` / `coolbx-rollback` / `coolbx-powerwash`
-  achter een **polkit `manage-units`-rule**; een kleine "Coolbx-instellingen"-GUI (of **Cockpit** voor admin) roept
-  `systemctl start <unit>` aan. Geen sudo, geen pkexec-shell, geen wachtwoord.
-- **Powerwash (ChromeOS-stijl factory reset):** primair **`bootc install reset --experimental --apply`** → verse `/etc`
-  uit het image + lege `/var` (incl. `/var/home`). Schoon toestel voor de volgende leerling/jaar. (UB heeft
-  `ujust powerwash` als referentie.) Lange-termijn-alternatief: systemd `factory-reset.target` (vereist systemd ≥258
-  + aparte `/var`/`/home`-partities). De *generaliseer*-logica (FOG) en powerwash delen dezelfde basis.
-- **GRUB-spanning:** verborgen kiosk-GRUB vs. zichtbaarheid van de rollback-entry — bewuste keuze (korte timeout of
-  Shift/Esc toelaten) zodat een mens in nood nog kan terugvallen.
-
----
-
-## Toestel-attestatie & vertrouwen (proof of genuine kiosk)
-
-> **Open kernvraag:** hoe bewijst een client aan de Focus-server dat het écht Coolbx OS is, in een kiosk-sessie, met de
-> echte extensie — en niet een nagebootste browser/extensie op een gewone laptop? Zelf-gerapporteerde waarden
-> (`kioskMode=true` uit managed-storage) zijn **zwak**: een vervalste client liegt gewoon.
-
-Gelaagde aanpak (haalbaar-nu → later-spike):
-1. **Toestel-identiteit + enrollment.** Elk toestel enrollt bij eerste boot bij de Focus-server en krijgt een
-   **device-credential, idealiter TPM-gebonden**. Server houdt een allowlist; toetsen aanvaarden enkel enrolled toestellen.
-2. **Genuine OS via secure boot + signed image.** UEFI Secure Boot + gesigneerde bootc-image + `policy.json` (Fase 5) →
-   aantoonbaar de echte Coolbx OS. **TPM measured boot** kan dit naar de server attesteren (PCR-quote).
-3. **Lokale attestatie-agent (géén browser-extensie) als vertrouwensanker.** Een kleine *privileged* OS-service die de
-   device-credential houdt en een **getekend sessie-token** levert ("dit is toestel X, nú in kiosk-modus"). De extensie
-   praat ermee via **native messaging** (zelfde host als het exit-signaal, punt 5) en presenteert het token aan de server.
-   Een OS-agent geworteld in de TPM is veel sterker dan de extensie alleen (die op een ander OS na te bootsen is).
-4. **Egress-lockdown in kiosk-modus.** Het OS laat in kiosk enkel verkeer naar `focus-api`/`dashboard` toe.
-
-**Eerlijk over het dreigingsmodel:** dit zet de lat enorm veel hoger dan een gewone laptop, maar volledige
-remote-attestatie van "vergrendelde kiosk + echte extensie" is serieus werk (ChromeOS gebruikt TPM-backed Verified
-Access). Diepe TPM-attestatie is een **latere fase/spike**; maar we **ontwerpen er nu voor** (enrollment/device-identiteit,
-TPM-beschikbaarheid, native-messaging-agent, egress-lockdown). **Gedeeld contract met het Focus-server-team.**
+### Vlootbeheer, uitrol & observability *(nieuw)*
+- **Enrollment-tijdlijn (één verhaal):** v1-pilot = toestel boot met machine-id + hostname (first-boot regen); Focus-server
+  vertrouwt toestellen op het schoolnetwerk (geen attestatie in pilot — **expliciet**). Fast-follow: enrollment deelt een
+  **per-toestel HMAC-secret** uit (ADR-0013) → server-allowlist + revocatie (kwijt/gestolen).
+- **Release-compatibiliteit (naad OS↔Focus):** een **compatibiliteits-matrix** (welke OS-versie ↔ welke Focus-server-/
+  extensie-versie + HMAC-schema-versie). Aparte lifecycles/artefacten (OS-image op GHCR, Focus-server-deploy), gecoördineerd
+  via dit contract — **geen** gefuseerde pijplijn ([ADR-0012](../docs/adr/0012-standalone-os-focus-optioneel.md)).
+- **Canary/ring-uitrol:** image-tags `:testing` → `:stable`; handvol test-toestellen op `:testing`, vloot op `:stable`,
+  **handmatige promotie**. Voorkomt dat één slechte build 's nachts de hele vloot sloopt (greenboot vangt enkel boot-crashes,
+  niet "extensie laadt niet meer"). Ring-toewijzing via ansible.
+- **Observability/support:** lokale status (greenboot-status, laatste OTA, kiosk-fouten) zichtbaar voor schoolIT
+  (Cockpit lokaal); `[te bevestigen]` centrale telemetrie (privacygevoelig — minderjarigen). Support-/escalatiepad definiëren.
+- **Leerkracht-interactie met het toestel:** OS biedt de waybar-exit + basis-toestelbediening; klassikaal beheer
+  (30 toestellen in toetsmodus, status zien) = Focus-feature. Expliciet benoemen wat OS wél/niet doet.
 
 ---
 
 ## Fasering
 
-### Fase 0 — Repo & skelet opzetten
-- `git init` in `/home/johan/code/coolbx/coolbx-os`; basis op `ublue-os/image-template`-structuur
-  (Containerfile, Justfile, `build_files/`, `system_files/`, `.github/workflows/`).
-- Naamgeving meteen correct: `coolbx-os` overal; **geen** `schoolbx`-restanten meenemen.
-- `.gitignore` voor build-artefacten (POC had `_build-bib.*`, `output/`, `cosign.key` ingecheckt — **niet** doen; cosign-private key via GitHub secret).
-- README + deze roadmap onder `docs/`; `docs/DEVELOPING.md` (zie dev-workflow hierboven).
+### Fase 0 — Repo & skelet ✅ (gestart)
+Repo geïnit (`main`), `.gitignore`, docs. Nog: skelet (`Containerfile`, `Justfile`, `build_files/`, `system_files/`,
+`features/`, `.github/workflows/`, `docs/DEVELOPING.md`) + de qemu-direct dev-harness (`dev-vm`, `vm-ssh`, `vm-shot`).
 
-### Fase 1 — Base image: fedora-bootc + beheerde GNOME → boot in VM
-- `Containerfile`: `FROM quay.io/fedora/fedora-bootc:43` (verifieer huidige tag op quay.io).
-- `build_files/01-packages.sh` (port + opschonen van POC): GNOME-desktop op de minimale base
-  (`gnome-shell`, `gdm`, `gnome-control-center`, NetworkManager, `gnome-terminal` optioneel),
-  `chromium`, `sway`, `waybar`, `ansible-core`. Firefox weglaten. **cage niet meer.**
-- `build_files/02-config.sh`: locale `nl_BE.UTF-8` + keymap `be`, GDM autologin overweegbaar,
-  units enablen. Hernoem alle `schoolbx-*` → `coolbx-*` (firstboot-user, presets, tmpfiles, `/etc/coolbx`, `/var/lib/coolbx`).
-- `build_files/03-gnome-dconf.sh`: coolbx-wallpapers + GNOME-defaults (port).
-- First-boot testuser (`coolbx-firstboot-user.sh`) enkel in dev-builds (`ENABLE_FIRSTBOOT_USER`), `=0` voor prod.
-- Justfile-recepten porten: `build`, `build-prod`, `build-qcow2`, `run-vm-qcow2`, `lint`.
-- **Verificatie:** `just build && just build-qcow2 && just run-vm-qcow2` → boot tot GNOME, NL/BE-locale klopt.
+### Fase 1 — De-risk spikes (vooraan, parallel) ⚠️ gate voor al de rest
+Bewijs in de VM, machine-leesbaar, vóór fasen "af" heten:
+1. **S1 base-spike:** triviaal `fedora-bootc:43 + GNOME` **én** `ublue-os/base-main` minimaal bouwen + booten in VM
+   (+ liefst echte testhardware). **Beslis de base op bewijs.** Lever de volledige geverifieerde pakketlijst.
+2. **S2 Chromium-spike:** `3rdparty` managed-storage (`serverUrl`/`kioskMode`) **+ de ENFORCEMENT-policy-set** met een
+   **lokaal geladen** test-extensie (losgekoppeld van de externe `update.xml`). Verificatie = "devtools/downloads/`file://` dood",
+   niet enkel "waarde komt aan".
+3. **S3 kiosk-escape-spike:** sway-gestript + VT-lockdown op logind-niveau + SWAYSOCK afgeschermd; bewijs dat
+   Ctrl+Alt+Fx dood is **tijdens een Chromium-crash**. Boot-time escape-test (GRUB/sysrq/live-USB) genoteerd voor fast-follow.
+4. **S4 update-spike:** bestaat `bootc install reset --experimental` op de base? werkt greenboot-rs auto-rollback op het bootc-pad? → anders fallbacks.
 
-### Fase 2 — Chromium-policy spike (de-risk het kernmechanisme) ⚠️ kritisch & vroeg
-Dit is de enige echt onzekere bouwsteen; bewijs het in een VM vóór de rest af is.
-- Eén policy-JSON `system_files/etc/chromium/policies/managed/coolbx-focus.json` met **zowel**:
-  - `ExtensionSettings.<ID>`: `installation_mode: force_installed`, `update_url`
-    = `https://focus-dashboard.edugolo.be/extension-updates/update.xml`, `override_update_url: true`.
-  - `3rdparty.extensions.<ID>`: `serverUrl = https://focus-api.edugolo.be`, `kioskMode = true`.
-  - `<ID>` = `makdakigkdbicdljgdclgnejachcohag` (vast via `key` in manifest).
-- **Verificatie in VM:** `chrome://policy` toont force-install; in de extensie/DevTools geeft
-  `chrome.storage.managed.get()` → `{serverUrl, kioskMode:true}`. `chrome://extensions` toont
-  "geïnstalleerd door beleid" met juiste ID.
-- Valkuilen om te checken: ID-mismatch (`.crx` gesigneerd met juiste key), Fedora-pad `/etc/chromium/...`,
-  schema-validatie tegen `managed_schema.json`, `minimum_chrome_version: 116` gehaald door Fedora-Chromium.
-- Bron-extensie + `update.xml`-hosting liggen in de Focus-repo/dashboard (apart traject) — bevestig dat de
-  `update.xml` en `.crx` bereikbaar/gesigneerd zijn.
+### Fase 2 — Chromium-policy + enforcement (productie-vorm van S2)
+Eén policy-JSON `system_files/etc/chromium/policies/managed/coolbx-focus.json`: `ExtensionSettings.<ID>`
+(`force_installed` + `update_url` + `override_update_url`) **+ `3rdparty.extensions.<ID>`** (`serverUrl`, `kioskMode`)
+**+ de enforcement-keys**. `<ID>` = `makdakigkdbicdljgdclgnejachcohag`. **Harde dependency-gate:** Focus-team levert
+ondertekende `.crx` + bereikbare `update.xml` (anders blokkeert force-install — externe blocker).
 
 ### Fase 3 — Vergrendelde kiosk-sessie (sway + waybar + Chromium)
-- Port en herwerk het POC-`start-focus`-mechanisme → `coolbx-kiosk-start`:
-  - `systemd-run` transiente unit `coolbx-kiosk` als user `kiosk`, `PAMName=login`, op `/dev/tty4`,
-    `ExecStopPost=+/usr/bin/chvt 2`, dan `chvt 4`. (Patroon uit POC `start-focus`.)
-  - Start `sway` met een dichtgetimmerde config i.p.v. `cage`:
-    `sway -c /usr/share/coolbx/kiosk/sway.conf` die `exec` Chromium `--ozone-platform=wayland --kiosk <Focus-URL>`.
-- `sway.conf` hardening: **alle keybinds verwijderen** (geen workspace-switch, geen exec, geen `mode`),
-  geen titelbalk/floating, VT-switch geblokkeerd. Let op de bekende quirk: Chromium/Ozone 103+ vangt
-  keybinds af bij focus — in ons voordeel, maar in VM bevestigen.
-- `waybar` met minimale modules: netwerk (wifi), batterij, klok, en een **"Sessie afsluiten"**-knop die de
-  bewuste-exit-flow start (confirm → `systemctl stop coolbx-kiosk`). De "ingediend?"-waarschuwing zelf hoort
-  bij de Focus-extensie; waybar-knop is de OS-fallback.
-- Crash-recovery: `Restart=always` op de Chromium-laag binnen sway (of `while true`-wrapper), zodat een
-  browsercrash de sessie niet stilletjes naar GNOME laat vallen.
-- `sysusers.d/kiosk.conf`, AccountsService, polkit-regel (port `49-focus.rules` → `49-coolbx-kiosk.rules`)
-  zodat de launcher zonder wachtwoord via `pkexec` mag starten. Launcher = `coolbx-toetsmodus.desktop`.
-- **Ephemeral kiosk-home** (zie sectie *Kiosk-gebruiker & bestandssysteem*): Chromium-profiel op tmpfs / wipe per sessie.
-- **Verificatie e2e:** GNOME → klik Toetsmodus → sway-kiosk op VT4 → Chromium fullscreen → extensie aanwezig
-  → verbindt met `focus-api.edugolo.be` → leerling op join. Ctrl+Alt+Fn doet niets. "Afsluiten" → terug GNOME.
+`coolbx-kiosk-start` (port van de `systemd-run`/VT-mechaniek uit POC `features/focus-mode/system_files/usr/bin/start-focus`,
+maar `cage`→`sway`, `focus-app`→Chromium). Unit `coolbx-kiosk` (user `kiosk`, tty4, `ExecStartPre`-wipe, `ExecStopPost=+chvt 2`).
+**Geen `Restart=always` op unit-niveau** — bewuste exit = `systemctl stop`; crash-recovery enkel op de **inner browser-wrapper**
+met max-restart-rate + fail-closed scherm bij crash-loop. waybar "Sessie afsluiten" met **OS-side confirm** (niet enkel Focus).
+sway.conf + logind-config + `SWAYSOCK`-afscherming + multi-output-mirror als artefacten. polkit `49-coolbx-kiosk.rules` (één action-id).
 
-### Fase 4 — Hardening (de "laag 1"-vloer)
-- **In de kiosk:** geen VT-switch (sway), geen sway-exec/keybinds, geen terminal, Chromium-policy tegen
-  devtools/incognito/downloads/printen waar nodig, USB-mass-storage-beleid overwegen.
-- **In GNOME (beheerd):** dconf-lockdown (geen systeeminstellingen wijzigen, geen extra software,
-  vergrendelde locale/keyboard). GNOME-integriteit is voor *toestelbeheer*, niet voor examenintegriteit
-  (die zit op de Focus-laag), dus pragmatisch dichttimmeren — niet overdrijven.
-- Overweeg `gnome-terminal` weglaten op leerling-profiel.
+### Fase 4 — Hardening + vrije-modus + a11y
+Kiosk-jail (zie security v1), vrije-modus capability-matrix toepassen (dconf-lockdown pragmatisch), klok-lockdown,
+accessibility-laag. GNOME-gast onbereikbaar tijdens kiosk.
 
-### Fase 5 — Signing, policy.json & auto-update (productie-distributie)
-- **CI** (port POC `build.yml`): buildah → GHCR `ghcr.io/<owner>/coolbx-os`, **cosign sign-by-digest**,
-  enkel op default branch, key via secret. `build-disk.yml` voor qcow2/anaconda-iso via bootc-image-builder
-  (container werkt nog; bron-repo is gearchiveerd naar `osbuild/image-builder`).
-- **On-device verificatie:** `system_files/etc/containers/policy.json` met `default: reject` +
-  `sigstoreSigned`/`matchRepository` voor de GHCR-namespace; **`keyPaths` (meervoud, 2 keys)** vanaf dag 1
-  voor sleutelrotatie; `registries.d` met `use-sigstore-attachments: true`; public key in `/etc/pki/containers/coolbx.pub`.
-- **Auto-update voor onbeheerde schooltoestellen:** geen kale 8u-timer (rebootet midden in een toets).
-  Drop-in op `bootc-fetch-apply-updates.timer` met **off-hours window** (`--download-only` overdag,
-  `--from-downloaded --apply` 's nachts), of uupd-stijl (stage + apply bij natuurlijke reboot). Verifieer
-  timer-waarden op de gekozen base.
+### Fase 5 — Signing, policy.json, auto-update + **canary**
+CI (port POC `build.yml` — **verifieer dat de cosign-sign-stap er effectief in zit**): buildah → GHCR
+`ghcr.io/<owner>/coolbx-os`, sign-by-digest, enkel default branch. **Canary-tags `:testing`/`:stable`.** policy.json
+(`default: reject`, `keyPaths` ×2, key-recovery), `registries.d`, public key. Off-hours update-timer (`Persistent=true`).
+greenboot-rs + **lokale** `required.d`-checks. BIB-image **gepind** (niet `:latest`).
 
-### Fase 5b — Deployment op hardware (FOG-flow) — *niet prioritair, latere fase*
-Interactief master-image → generaliseren → FOG capture → FOG deploy → first-boot regen → OTA.
-- **`build-disk.yml`**: behoud interactieve **`anaconda-iso`** (master-build) + `raw`/`qcow2` voor test.
-  Bouw de master-rootfs als **`ext4`** (BIB `--rootfs=ext4`) voor FOG-vriendelijke, resizable images
-  (btrfs werkt via partclone maar is fussier) — bevestig in test.
-- **`coolbx-generalize`** (`system_files/usr/bin/`, bootc-"sysprep"): wis vóór FOG-capture
-  `/etc/machine-id` (leeg laten), SSH host keys, persistente net-regels, journald-logs,
-  `/var/lib/coolbx/*`-markers en ansible-state. Te draaien op de master net vóór capture.
-- **First-boot regen-service** (`coolbx-firstboot-*`): per toestel machine-id (systemd auto bij lege id),
-  hostname (of FOG's hostname-feature), `growfs`/`growpart` als doelschijf groter is.
-- **Aannames/hardening:** identieke of grotere schijf + zelfde partitielayout (bootc BLS blijft geldig);
-  geen full-disk-encryptie (kiosk, geen lokale data).
-- **Verificatie:** master interactief installeren → generaliseren → FOG capture → deploy op 2 toestellen →
-  beide unieke machine-id/hostname → `bootc status` ok → **OTA-update pullt door na de kloon**.
+### Fase 5b — Deployment FOG-flow — *niet prioritair, latere fase*
+Interactieve Anaconda-ISO (master) → `coolbx-generalize` (sysprep: machine-id=`uninitialized\n`, SSH-keys, logs,
+`/var/lib/coolbx/*`, ansible-state) → FOG capture → deploy → first-boot regen (machine-id/hostname/growfs) → OTA.
+Master-rootfs `ext4` (parametriseer `--rootfs`; draai ≥1 ext4-build in de loop). Validatie van OTA-na-kloon = later.
 
-### Fase 6 — Vlootbeheer via ansible-pull (port)
-- Port de POC `ansible-pull.timer/.service` → repo `github.com/edugolo/ansible` (of `coolbx-ansible`).
-- Groepsdetectie via `/usr/share/ansible/laptop-group` (leerlingen/leerkrachten/administratie) → per-rol playbooks.
-  Beheerde GNOME-laptop maakt dit zinvol (verschillende profielen, niet enkel kiosk).
-- **Haalbaar voor scholen?** Ja — git-gebaseerde `ansible-pull` vereist **geen centrale server/MDM-infra** en is
-  operationeel eenvoudig (een git-repo, geen orchestrator). **Maar scope het strak:** enkel voor échte
-  runtime/per-toestel/per-rol-config (groepslidmaatschap, netwerk/printer, enrollment, kleine policy-toggles).
-  **Niet** voor software-installatie of kernconfig — dat hoort in het *image*, anders vecht het met bootc's immutable
-  model (config-drift + twee bronnen van waarheid). De Chromium-policy/managed-storage zit dus in het **image**, niet in ansible.
-- Idempotente, minimale playbooks. Fleet/MDM (de POC's uitgecommentarieerde `fleetctl`) is een latere optie bij grote schaal.
+### Fase 6 — Vlootbeheer via ansible-pull (strak gescoped)
+Port `ansible-pull.timer/.service` → `github.com/edugolo/ansible`. **Enkel** runtime/per-rol-config (groep, netwerk/printer,
+ring-toewijzing, kleine toggles) — **niet** software/kernconfig (die in image). Groepstoewijzing: hoe krijgt toestel #347
+zijn `laptop-group`? (FOG/host_vars/handmatig — `[te bevestigen]`). Idempotent, minimaal. Vendoring i.p.v. netwerk-call in build.
 
-### Fase 7 — Branding & afronding
-- coolbx-glyph/wordmark binnen de coolbx-familie (parallel aan "coolbx focus"); GNOME-wallpapers + GDM.
-- Schrap POC-restanten (`NAAMKEUZE-SchoolBX.md`, `chatgpt/`-assets).
-- Distilleer relevante delen terug in `CLAUDE.md` (statusupdate: niet langer "nul").
+### Fase 7 — Branding (play↔focus)
+Eigen OS-glyph + accent (géén schild) rond de **play↔focus-dualiteit**; Plymouth/GDM/os-release vroeg zetten zodat
+latere fasen niet op "generieke Fedora" testen. `generate.sh`-pijplijn als "branding"-feature. Hero-art = designpass (ik scaffold).
+
+### Fase 8 — Observability & support  *(nieuw)*
+Lokale vlootstatus (Cockpit), support-/escalatiepad, `[te bevestigen]` centrale telemetrie.
+
+### Fase 9 — Pilot & school-documentatie  *(nieuw)*
+School-/admin-docs (enrollment, reset, wifi, troubleshooting). Pilot op canary-ring met echte toestellen + feedback → breed accountmodel beslissen.
 
 ---
 
-## Te creëren/wijzigen sleutelbestanden (nieuw, geïnspireerd op POC-paden)
+## Te creëren/wijzigen sleutelbestanden
+`Containerfile`, `Justfile`, `.github/workflows/build.yml`+`build-disk.yml`, `build_files/{01-packages,02-config,03-gnome-dconf,install-features}.sh`,
+`features/{kiosk,branding}/…`, `system_files/etc/chromium/policies/managed/coolbx-focus.json`, `…/usr/bin/coolbx-kiosk-start`,
+`…/usr/share/coolbx/kiosk/{sway.conf,waybar/}`, `…/etc/polkit-1/rules.d/49-coolbx-kiosk.rules`, `…/usr/lib/sysusers.d/kiosk.conf`,
+nftables egress-config, `…/etc/containers/{policy.json,registries.d/}` + `/etc/pki/containers/coolbx.pub`,
+`…/usr/bin/coolbx-generalize`, greenboot `required.d`-checks, systemd units (`coolbx-*`), `docs/{DEVELOPING,SCHOOL-ADMIN}.md`.
 
-- `Containerfile`, `Justfile`, `.github/workflows/build.yml` + `build-disk.yml`
-- `build_files/01-packages.sh`, `02-config.sh`, `03-gnome-dconf.sh`
-- `system_files/etc/chromium/policies/managed/coolbx-focus.json`  ← **Fase 2 kern**
-- `system_files/usr/bin/coolbx-kiosk-start`  (port van POC `start-focus`)
-- `system_files/usr/share/coolbx/kiosk/sway.conf` + `waybar/`-config
-- `system_files/usr/share/applications/coolbx-toetsmodus.desktop` + `etc/polkit-1/rules.d/49-coolbx-kiosk.rules`
-- `system_files/usr/lib/sysusers.d/kiosk.conf`, AccountsService
-- `system_files/etc/containers/policy.json`, `registries.d/`, `/etc/pki/containers/coolbx.pub`
-- `system_files/usr/bin/coolbx-generalize` (bootc-"sysprep" vóór FOG-capture) + first-boot regen-service
-- `system_files/usr/lib/systemd/...` units (firstboot-user, ansible-pull, update-drop-in) — `coolbx-*` benaming
-- `docs/DEVELOPING.md` (lokale dev-workflow / VM)
+## Open productkeuzes om te bevestigen (pilot-defaults gekozen, verfijnbaar)
+Web-filtering vrije modus · USB-beleid · printen · meertaligheid (NL-only vs NL/FR + layout-switch) · zelf wifi kiezen ·
+centrale telemetrie (minderjarigen) · `laptop-group`-toewijzingsbron · breed account-model (na pilot).
 
-## Open spikes / risico's
-1. **`chrome.storage.managed` op Fedora-Chromium** (Fase 2) — minst gedocumenteerd; vroeg in VM bewijzen.
-2. **sway-versie + Ozone-keybind-gedrag** — bevestig dat keybinds écht onbruikbaar zijn voor de leerling en VT-switch dicht is.
-3. **fedora-bootc + GNOME** — minimale base zelf tot bruikbare beheerde desktop maken (Fedora-docs "building your own atomic bootc desktop" als gids); UB-`build_files` als referentie bij hardware-/firmware-problemen.
-4. **`.crx`-signing & `update.xml`-hosting** (Focus-kant) — ID `makdakigkdbicdljgdclgnejachcohag` moet kloppen.
-5. **OS↔Focus exit-signaal (extensie blijft cross-platform).** v1: bewuste exit = **waybar-knop** (OS-side, schone stop); de extensie toont enkel de "ingediend? zeker?"-UX en sluit haar venster. v2 (nice-to-have): **native-messaging host** op Coolbx OS die de extensie kan aanspreken om de sessie te beëindigen — **feature-detected**, zodat dezelfde extensie op andere platforms gewoon no-opt. Bewuste exit vs. crash onderscheiden via Chromium-exitcode (anders herstart `Restart=always` de browser).
-6. **FOG-kloon van bootc — niet prioritair (latere fase).** Near-term uitrol = interactieve Anaconda-ISO. De generaliseer-logica is sowieso nuttig (zie *Powerwash*), maar de FOG-kloonvalidatie (`ext4`-rootfs, machine-id-regen, BLS overleeft kloon, OTA-na-kloon) schuift naar later.
-7. **Toestel-attestatie** (zie sectie) — TPM-enrollment + native-messaging-agent ontwerpen we nu; diepe remote-attestatie is later. Gedeeld contract met Focus-server.
-8. **Powerwash/rollback** (zie sectie) — `bootc install reset` experimental-status, greenboot-rs op het bootc-pad, systemd-versie ≥258, Cockpit-ostree op bootc: in VM bevestigen.
-
-## Eindverificatie (e2e in VM, `just run-vm-qcow2`)
-Boot → beheerde GNOME (NL/BE) → "Toetsmodus" → vergrendelde sway-kiosk → Chromium kiosk met
-geforceerde Focus-extensie → managed-storage (`serverUrl`/`kioskMode`) bevestigd via `chrome://policy` +
-`chrome.storage.managed.get()` → leerling landt op join via `focus-api.edugolo.be` → geen ontsnapping
-(VT/keybinds dood) → bewuste "Afsluiten" → terug naar GNOME. Update- en signing-pad getest met een tweede image-tag.
-```
-```
+## Eindverificatie (e2e in VM, machine-leesbaar)
+Boot → beheerde GNOME-gast (NL/BE) → "Toetsmodus" → sway-kiosk (VT4) → Chromium kiosk **met enforcement-policy
+bewezen** (devtools/downloads/`file://`/VT-switch dood, ook tijdens crash) → Focus-extensie aanwezig → join via
+`focus-api.edugolo.be` → offline = fail-closed → bewuste exit (OS-confirm) → terug GNOME → gast-logout wist profiel →
+powerwash test → update/canary + greenboot-rollback test. Verificatie via SSH-CLI-checks + `screendump`-PNG's.
