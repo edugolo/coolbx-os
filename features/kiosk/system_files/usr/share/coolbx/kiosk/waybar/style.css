@@ -1,23 +1,47 @@
+/* Coolbx kiosk-balk — strak, in de coolbx-stijl (inkt/papier). */
 * {
-  font-family: "DejaVu Sans", sans-serif;
+  font-family: "DejaVu Sans", "Noto Sans", sans-serif;
   font-size: 13px;
+  font-weight: 500;
   border: none;
   border-radius: 0;
+  min-height: 0;
 }
+
 window#waybar {
-  background: #2b2620;   /* coolbx inkt */
-  color: #faf8f3;        /* coolbx papier */
+  background: #2b2620;       /* inkt */
+  color: #faf8f3;            /* papier */
 }
-#clock, #network, #battery, #custom-brand, #custom-exit {
-  padding: 0 14px;
-}
+
 #custom-brand {
-  font-weight: bold;
-}
-#custom-exit {
-  background: #6b4a2a;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.3px;
+  padding: 0 22px;
   color: #faf8f3;
 }
+
+#clock {
+  color: #ded7c9;
+  letter-spacing: 0.5px;
+}
+
+#network,
+#battery {
+  padding: 0 16px;
+  color: #b8b0a1;
+}
+
+#custom-exit {
+  margin: 6px 14px 6px 8px;
+  padding: 0 18px;
+  border-radius: 15px;
+  background: #3a332b;
+  color: #faf8f3;
+  font-weight: 600;
+}
+
 #custom-exit:hover {
-  background: #8a5f36;
+  background: #e8902a;       /* amber accent bij hover */
+  color: #2b2620;
 }

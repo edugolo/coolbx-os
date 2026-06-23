@@ -1,28 +1,36 @@
 {
   "layer": "top",
   "position": "top",
-  "height": 32,
+  "height": 38,
+  "spacing": 0,
+  "margin-top": 0,
   "modules-left": ["custom/brand"],
   "modules-center": ["clock"],
   "modules-right": ["network", "battery", "custom/exit"],
+
   "custom/brand": {
-    "format": "Coolbx · Toetsmodus"
+    "format": "coolbx <span foreground='#e8902a'>·</span> toetsmodus",
+    "tooltip": false
   },
   "clock": {
-    "format": "{:%a %d %b  %H:%M}"
+    "format": "{:%A %e %B  ·  %H:%M}",
+    "locale": "nl_BE.UTF-8",
+    "tooltip": false
   },
   "network": {
     "format-wifi": "wifi {signalStrength}%",
-    "format-ethernet": "bekabeld",
-    "format-disconnected": "geen verbinding",
-    "tooltip-format": "{essid} ({ipaddr})"
+    "format-ethernet": "verbonden",
+    "format-disconnected": "geen netwerk",
+    "tooltip": false
   },
   "battery": {
-    "format": "batt {capacity}%",
-    "format-charging": "laden {capacity}%"
+    "format": "batterij {capacity}%",
+    "format-charging": "laden {capacity}%",
+    "format-full": "batterij vol",
+    "tooltip": false
   },
   "custom/exit": {
-    "format": "Afsluiten",
+    "format": "Sessie afsluiten",
     "on-click": "/usr/bin/coolbx-kiosk-exit",
     "tooltip": false
   }

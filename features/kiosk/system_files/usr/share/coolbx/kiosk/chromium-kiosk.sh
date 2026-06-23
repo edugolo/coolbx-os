@@ -19,7 +19,8 @@ while [ "$n" -lt 10 ]; do
     --disable-dev-shm-usage \
     --no-first-run --no-default-browser-check \
     --disable-session-crashed-bubble --disable-infobars \
-    --kiosk "$URL" || true
+    --start-maximized \
+    --app="$URL" || true
   n=$((n + 1))
   sleep 1
 done
