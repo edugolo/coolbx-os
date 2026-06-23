@@ -23,16 +23,20 @@ build-prod tag=default_tag:
       --build-arg ENABLE_FIRSTBOOT_USER=0 \
       --tag "localhost/{{ image_name }}:{{ tag }}" .
 
-# Bouw een bootable qcow2 via bootc-image-builder (rootful, passwordless sudo podman).
-# Bouwt rootful zodat BIB de image in /var/lib/containers/storage vindt.
+# Bouw een bootable qcow2 via bootc-image-builder.
+# Rootless build (heeft netwerk) → image via save|load naar root-storage (rootful build
+# heeft hier geen DNS) → BIB leest /var/lib/containers/storage.
 build-qcow2 tag=default_tag:
     #!/usr/bin/env bash
     set -euo pipefail
-    echo ">> rootful build localhost/{{ image_name }}:{{ tag }} (base={{ base_image }}, features='{{ features }}')"
-    sudo podman build \
+    IMG="localhost/{{ image_name }}:{{ tag }}"
+    echo ">> rootless build $IMG (base={{ base_image }}, features='{{ features }}')"
+    podman build \
       --build-arg BASE_IMAGE="{{ base_image }}" \
       --build-arg FEATURES="{{ features }}" \
-      --tag "localhost/{{ image_name }}:{{ tag }}" .
+      --tag "$IMG" .
+    echo ">> image naar rootful storage (save|load, geen netwerk/rebuild)"
+    podman save "$IMG" | sudo podman load
     mkdir -p output
     echo ">> bootc-image-builder → qcow2 (rootfs={{ rootfs }})"
     sudo podman run --rm --privileged --pull=newer \
@@ -42,8 +46,10 @@ build-qcow2 tag=default_tag:
       -v /var/lib/containers/storage:/var/lib/containers/storage \
       "{{ bib_image }}" \
       --type qcow2 --rootfs "{{ rootfs }}" --use-librepo=True \
-      "localhost/{{ image_name }}:{{ tag }}"
-    sudo chown -R "$(id -un):$(id -gn)" output
+      "$IMG"
+    # BIB-output is root-owned; sudo is alleen voor podman → fix ownership via een podman-container.
+    sudo podman run --rm --security-opt label=disable -v "$(pwd)/output:/output" \
+      "{{ base_image }}" chown -R "$(id -u):$(id -g)" /output
     echo ">> klaar: output/qcow2/disk.qcow2"
 
 # Start de dev-VM headless (qemu-direct, UEFI). SSH op :2222, monitor-socket voor screenshots.

@@ -22,8 +22,9 @@ packages=(
   gnome-control-center gnome-settings-daemon
   nautilus gnome-keyring
   xdg-desktop-portal xdg-desktop-portal-gnome xdg-user-dirs-gtk
-  # Graphics / firmware (hardware-support)
+  # Graphics / firmware (hardware-support — geleerd van Universal Blue, ADR-0004)
   mesa-dri-drivers mesa-vulkan-drivers
+  linux-firmware
   # Audio
   pipewire wireplumber pipewire-pulseaudio
   # Netwerk
@@ -48,3 +49,6 @@ dnf5 -y install --setopt=install_weak_deps=False --allowerasing "${packages[@]}"
 dnf5 -y remove firefox firefox-langpacks 2>/dev/null || true
 
 dnf5 clean all
+
+# /var schoon houden (bootc-lint geeft anders waarschuwingen over dnf-logs/countme).
+rm -rf /var/log/dnf* /var/lib/dnf/repos/*/countme 2>/dev/null || true

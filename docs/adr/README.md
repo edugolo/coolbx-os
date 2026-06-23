@@ -11,7 +11,7 @@ oude op status "Vervangen door ADR-XXXX").
 | [0001](0001-aparte-repo.md) | Aparte repo, los van de Focus-monorepo | Aanvaard |
 | [0002](0002-vers-herbouwen-geen-electron.md) | Vers herbouwen rond de productie-extensie, geen Electron | Aanvaard |
 | [0003](0003-fedora-bootc-fundament.md) | Fedora bootc als OS-fundament | Aanvaard |
-| [0004](0004-base-image-via-spike.md) | Concrete base-image beslist via spike | Voorgesteld |
+| [0004](0004-base-image-via-spike.md) | Base-image: fedora-bootc (beslist via spike S1) | Aanvaard |
 | [0005](0005-toestelmodel-beheerd-vergrendelt.md) | Beheerde laptop die op aanvraag vergrendelt | Aanvaard |
 | [0006](0006-kiosk-sway-waybar.md) | sway + waybar als kiosk-compositor | Aanvaard |
 | [0007](0007-integriteit-op-focus-laag.md) | Examenintegriteit op de Focus-server-laag | Aanvaard |
