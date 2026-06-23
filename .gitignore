@@ -15,6 +15,9 @@ output.env
 cosign.key
 *.pem
 
+# Persoonlijk kladblok (niet versiebeheren)
+NOTES.md
+
 # Scratch / editor / OS
 *.log
 *.tmp
