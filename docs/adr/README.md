@@ -22,3 +22,4 @@ oude op status "Vervangen door ADR-XXXX").
 | [0012](0012-standalone-os-focus-optioneel.md) | Coolbx OS standalone; Focus-integratie = optionele feature-laag | Aanvaard |
 | [0013](0013-anti-spoofing-hmac-per-device.md) | Anti-spoofing via HMAC-handshake + per-toestel-secret | Aanvaard (richting) |
 | [0014](0014-verificatie-en-autonomie.md) | Verificatie- & autonomie-aanpak tijdens de bouw | Aanvaard |
+| [0015](0015-s2-chromium-managed-storage.md) | S2: Chromium managed-storage + enforcement op Fedora (bevestigd) | Aanvaard |
