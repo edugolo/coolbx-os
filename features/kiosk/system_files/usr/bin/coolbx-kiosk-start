@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Start de vergrendelde toets-kiosk (sway + chromium) als de 'coolbx-kiosk'-user op een eigen VT.
+# Geport van de POC start-focus, maar cage->sway en focus-app->chromium (ADR-0006).
+# Wordt via pkexec gestart door de Toetsmodus-launcher (polkit-regel 49-coolbx-kiosk).
+
+KIOSK_USER="coolbx-kiosk"
+KIOSK_HOME="/var/lib/coolbx-kiosk"
+VT=3
+KIOSK_TTY="/dev/tty${VT}"
+RETURN_VT="${COOLBX_RETURN_VT:-2}"            # GNOME-gast draait op VT2
+URL="${COOLBX_KIOSK_URL:-https://focus-dashboard.edugolo.be/}"
+
+# Ephemeral home op tmpfs (schoon per sessie — privacy tussen leerlingen).
+# De home MOET bestaan en schrijfbaar zijn, anders kan Chromium z'n crashpad-db niet aanmaken.
+mkdir -p "$KIOSK_HOME"
+mountpoint -q "$KIOSK_HOME" && umount "$KIOSK_HOME" 2>/dev/null || true
+mount -t tmpfs -o "mode=0700,uid=${KIOSK_USER},gid=${KIOSK_USER}" tmpfs "$KIOSK_HOME"
+
+chown "$KIOSK_USER":tty "$KIOSK_TTY" 2>/dev/null || true
+chmod 620 "$KIOSK_TTY" 2>/dev/null || true
+
+# HOME/XDG_RUNTIME_DIR worden door pam_systemd gezet (niet via Environment= forceren).
+systemd-run --unit=coolbx-kiosk --collect \
+  --property=User="$KIOSK_USER" \
+  --property=PAMName=login \
+  --property=TTYPath="$KIOSK_TTY" \
+  --property=StandardInput=tty \
+  --property=StandardOutput=journal \
+  --property=StandardError=journal \
+  --property=UtmpIdentifier="tty${VT}" \
+  --property=UtmpMode=user \
+  --property=SupplementaryGroups="video input render tty" \
+  --property=Environment="WLR_RENDERER=pixman" \
+  --property=Environment="XKB_DEFAULT_LAYOUT=be" \
+  --property=Environment="COOLBX_KIOSK_URL=${URL}" \
+  --property="ExecStopPost=+/usr/bin/chvt ${RETURN_VT}" \
+  /usr/bin/sway -c /usr/share/coolbx/kiosk/sway.conf
+
+sleep 1
+chvt "$VT"

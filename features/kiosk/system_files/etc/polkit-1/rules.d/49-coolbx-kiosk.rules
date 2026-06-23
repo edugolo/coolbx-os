@@ -1,0 +1,9 @@
+// Sta de Toetsmodus-launcher toe om de kiosk te starten zonder wachtwoord.
+// Strikt gescoped op exact één programma (review-aanbeveling: geen wildcard).
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.policykit.exec" &&
+        action.lookup("program") == "/usr/bin/coolbx-kiosk-start" &&
+        subject.local && subject.active) {
+        return polkit.Result.YES;
+    }
+});

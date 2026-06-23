@@ -1,0 +1,11 @@
+{
+  "_comment": "Globale Chromium-policy: enkel managed-storage voor de Focus-extensie (ADR-0011/0015). GEEN globale URLBlocklist — dat zou ook de vrije-modus-browser dichttimmeren; de kiosk-lockdown komt van de sessie (sway --kiosk) + de extensie/egress.",
+  "3rdparty": {
+    "extensions": {
+      "makdakigkdbicdljgdclgnejachcohag": {
+        "serverUrl": "https://focus-api.edugolo.be",
+        "kioskMode": true
+      }
+    }
+  }
+}

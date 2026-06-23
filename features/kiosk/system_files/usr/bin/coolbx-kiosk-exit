@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Bewuste exit uit de kiosk (waybar-knop). De "ingediend? zeker?"-bevestiging hoort bij de
+# Focus-extensie; dit is de OS-fallback. Stopt de sway-sessie -> ExecStopPost chvt terug naar GNOME.
+set -euo pipefail
+swaymsg exit 2>/dev/null || systemctl stop coolbx-kiosk 2>/dev/null || true

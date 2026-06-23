@@ -1,0 +1,23 @@
+* {
+  font-family: "DejaVu Sans", sans-serif;
+  font-size: 13px;
+  border: none;
+  border-radius: 0;
+}
+window#waybar {
+  background: #2b2620;   /* coolbx inkt */
+  color: #faf8f3;        /* coolbx papier */
+}
+#clock, #network, #battery, #custom-brand, #custom-exit {
+  padding: 0 14px;
+}
+#custom-brand {
+  font-weight: bold;
+}
+#custom-exit {
+  background: #6b4a2a;
+  color: #faf8f3;
+}
+#custom-exit:hover {
+  background: #8a5f36;
+}

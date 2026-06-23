@@ -1,0 +1,29 @@
+{
+  "layer": "top",
+  "position": "top",
+  "height": 32,
+  "modules-left": ["custom/brand"],
+  "modules-center": ["clock"],
+  "modules-right": ["network", "battery", "custom/exit"],
+  "custom/brand": {
+    "format": "Coolbx · Toetsmodus"
+  },
+  "clock": {
+    "format": "{:%a %d %b  %H:%M}"
+  },
+  "network": {
+    "format-wifi": "wifi {signalStrength}%",
+    "format-ethernet": "bekabeld",
+    "format-disconnected": "geen verbinding",
+    "tooltip-format": "{essid} ({ipaddr})"
+  },
+  "battery": {
+    "format": "batt {capacity}%",
+    "format-charging": "laden {capacity}%"
+  },
+  "custom/exit": {
+    "format": "Afsluiten",
+    "on-click": "/usr/bin/coolbx-kiosk-exit",
+    "tooltip": false
+  }
+}
