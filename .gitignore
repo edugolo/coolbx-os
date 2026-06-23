@@ -1,0 +1,24 @@
+# Build- en VM-artefacten (bootc-image-builder / qemu)
+/output/
+_build*/
+*.qcow2
+*.raw
+*.iso
+*.img
+disk.*
+manifest-*.json
+previous.manifest.json
+changelog.md
+output.env
+
+# Cosign private key — NOOIT committen (publieke key mag wel)
+cosign.key
+*.pem
+
+# Scratch / editor / OS
+*.log
+*.tmp
+.DS_Store
+*~
+.idea/
+.vscode/
