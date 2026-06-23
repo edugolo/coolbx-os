@@ -12,7 +12,8 @@ FROM ${BASE_IMAGE}
 
 ARG SHA_HEAD_SHORT=local
 ARG IMAGE_VERSION=latest
-ARG ENABLE_FIRSTBOOT_USER=1
+# Veilige default: prod (géén dev-user/autologin). De dev-VM gebruikt `just build-dev` (=1).
+ARG ENABLE_FIRSTBOOT_USER=0
 # Spatie-gescheiden lijst van optionele features (bv. "kiosk focus branding"). Leeg = kale OS.
 ARG FEATURES=""
 

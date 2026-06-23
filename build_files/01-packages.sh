@@ -25,8 +25,9 @@ packages=(
   # Graphics / firmware (hardware-support — geleerd van Universal Blue, ADR-0004)
   mesa-dri-drivers mesa-vulkan-drivers
   linux-firmware
-  # Audio
+  # Audio (incl. sof-firmware: DSP-firmware = vaak dé showstopper op moderne Intel/AMD-laptops)
   pipewire wireplumber pipewire-pulseaudio
+  alsa-sof-firmware
   # Netwerk
   NetworkManager NetworkManager-wifi
   # Boot splash
@@ -34,8 +35,8 @@ packages=(
   # Browser + kiosk-compositor (kale OS bevat deze al; kiosk-feature gebruikt ze)
   chromium
   sway waybar
-  # i18n (nl_BE)
-  glibc-langpack-en glibc-langpack-nl
+  # i18n (nl_BE) — glibc-locale + GNOME-UI-vertalingen
+  glibc-langpack-en glibc-langpack-nl langpacks-nl
   google-noto-sans-fonts dejavu-sans-fonts dejavu-sans-mono-fonts
   # Config-pull + utils
   ansible-core git jq

@@ -15,12 +15,12 @@ build tag=default_tag:
       --build-arg FEATURES="{{ features }}" \
       --tag "localhost/{{ image_name }}:{{ tag }}" .
 
-# Prod-build (geen first-boot dev-user / autologin).
-build-prod tag=default_tag:
+# Dev-image MÉT autologin-testuser (tester/tester) — enkel voor de lokale VM-loop, NOOIT prod.
+build-dev tag=default_tag:
     podman build \
       --build-arg BASE_IMAGE="{{ base_image }}" \
       --build-arg FEATURES="{{ features }}" \
-      --build-arg ENABLE_FIRSTBOOT_USER=0 \
+      --build-arg ENABLE_FIRSTBOOT_USER=1 \
       --tag "localhost/{{ image_name }}:{{ tag }}" .
 
 # Bouw een bootable qcow2 via bootc-image-builder.
@@ -30,10 +30,11 @@ build-qcow2 tag=default_tag:
     #!/usr/bin/env bash
     set -euo pipefail
     IMG="localhost/{{ image_name }}:{{ tag }}"
-    echo ">> rootless build $IMG (base={{ base_image }}, features='{{ features }}')"
+    echo ">> rootless DEV-build $IMG (base={{ base_image }}, features='{{ features }}')"
     podman build \
       --build-arg BASE_IMAGE="{{ base_image }}" \
       --build-arg FEATURES="{{ features }}" \
+      --build-arg ENABLE_FIRSTBOOT_USER=1 \
       --tag "$IMG" .
     echo ">> image naar rootful storage (save|load, geen netwerk/rebuild)"
     podman save "$IMG" | sudo podman load
@@ -57,6 +58,9 @@ dev-vm:
     #!/usr/bin/env bash
     set -euo pipefail
     test -f output/qcow2/disk.qcow2 || { echo "Bouw eerst: just build-qcow2"; exit 1; }
+    if [ -f /tmp/coolbx-vm.pid ] && kill -0 "$(cat /tmp/coolbx-vm.pid 2>/dev/null)" 2>/dev/null; then
+      echo "VM draait al (pid $(cat /tmp/coolbx-vm.pid)). Doe eerst 'just vm-stop'."; exit 1
+    fi
     OVMF_CODE=$(ls /usr/share/edk2/ovmf/OVMF_CODE.fd /usr/share/OVMF/OVMF_CODE.fd 2>/dev/null | head -1 || true)
     OVMF_VARS_SRC=$(ls /usr/share/edk2/ovmf/OVMF_VARS.fd /usr/share/OVMF/OVMF_VARS.fd 2>/dev/null | head -1 || true)
     [ -n "$OVMF_CODE" ] || { echo "OVMF niet gevonden — installeer edk2-ovmf"; exit 1; }
@@ -81,6 +85,33 @@ vm-shot out="output/shot.png":
 # SSH in de dev-VM (testuser, wachtwoord 'tester').
 vm-ssh *args:
     sshpass -p tester ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2222 tester@127.0.0.1 {{ args }}
+
+# Wacht tot de VM via SSH bereikbaar is (default 120s). Exit !=0 bij timeout.
+vm-wait timeout="120":
+    #!/usr/bin/env bash
+    set -uo pipefail
+    for i in $(seq 1 {{ timeout }}); do
+      if sshpass -p tester ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=2 -p 2222 tester@127.0.0.1 true 2>/dev/null; then
+        echo "VM up na ${i}s"; exit 0
+      fi; sleep 1
+    done
+    echo "VM kwam niet up binnen {{ timeout }}s — zie output/serial.log"; exit 1
+
+# Machine-leesbare smoke-test tegen de draaiende VM. Exit !=0 bij falen (voor de autonome loop).
+check:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    vssh(){ sshpass -p tester ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=4 -p 2222 tester@127.0.0.1 "$@"; }
+    fail=0
+    chk(){ if vssh "$2" >/dev/null 2>&1; then echo "OK   $1"; else echo "FAIL $1"; fail=1; fi; }
+    chk "gdm actief"             'systemctl is-active --quiet gdm'
+    chk "NetworkManager actief"  'systemctl is-active --quiet NetworkManager'
+    chk "default=graphical"      'test "$(systemctl get-default)" = graphical.target'
+    chk "gnome-shell draait"     'pgrep -x gnome-shell'
+    chk "geen failed units"      'test "$(systemctl --failed --no-legend | wc -l)" -eq 0'
+    chk "nl_BE locale"           'grep -q nl_BE /etc/locale.conf'
+    [ $fail -eq 0 ] && echo "ALLE CHECKS OK" || echo "ER ZIJN CHECKS GEFAALD"
+    exit $fail
 
 # Stop de dev-VM.
 vm-stop:
