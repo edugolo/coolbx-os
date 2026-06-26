@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Coolbx OS — vlootconfig pullen & lokaal toepassen (Fase 6). ENKEL runtime/per-rol-config
+# (groep, netwerk/printer, ring, kleine toggles) — NOOIT software/kernconfig (die zit in het image).
+# De repo-URL staat in /etc/coolbx/ansible.conf zodat scholen 'm zonder rebuild kunnen zetten.
+set -uo pipefail
+
+CONF=/etc/coolbx/ansible.conf
+# shellcheck source=/dev/null
+[ -f "$CONF" ] && . "$CONF"
+
+URL="${ANSIBLE_PULL_URL:-}"
+if [ -z "$URL" ] || printf '%s' "$URL" | grep -q "PLACEHOLDER"; then
+  echo "coolbx-ansible-pull: geen repo geconfigureerd in $CONF — overslaan (no-op)"
+  exit 0
+fi
+
+GROUP="$(cat /usr/share/coolbx/ansible/laptop-group 2>/dev/null || echo leerlingen)"
+echo "coolbx-ansible-pull: groep=${GROUP} repo=${URL}"
+
+# -o: alleen draaien als de repo wijzigde (spaart server + CPU). De groep gaat als extra-var
+# mee zodat de playbook per rol kan vertakken (leerlingen/leerkrachten/administratie).
+exec /usr/bin/ansible-pull \
+  -U "$URL" -o \
+  --extra-vars "coolbx_group=${GROUP}" \
+  "${ANSIBLE_PULL_PLAYBOOK:-local.yml}"

@@ -1,0 +1,6 @@
+# Coolbx OS — registries.d entry (TEMPLATE). Activeren: kopieer naar
+# /etc/containers/registries.d/coolbx-os.yaml. Vertelt podman/bootc dat de cosign-handtekeningen
+# als sigstore-attachments naast de image in GHCR staan (zoals `cosign sign` ze pusht).
+docker:
+  ghcr.io/REPLACE_OWNER/coolbx-os:
+    use-sigstore-attachments: true

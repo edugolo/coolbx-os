@@ -1,0 +1,16 @@
+[Unit]
+# Coolbx OS — staged OTA-update (Fase 5). STAGE ONLY: `bootc upgrade` schrijft de nieuwe
+# deployment maar activeert die pas bij de VOLGENDE reboot → nooit een reboot midden in een
+# toets. De default bootc-fetch-apply-updates.timer (die kan applyen/rebooten) is gemaskeerd.
+Description=Coolbx OS staged update (bootc upgrade, no reboot)
+Documentation=https://coolbx.be/
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/run/ostree-booted
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/bootc upgrade --quiet
+# Net wakker / wifi nog niet op → kort opnieuw proberen.
+Restart=on-failure
+RestartSec=60

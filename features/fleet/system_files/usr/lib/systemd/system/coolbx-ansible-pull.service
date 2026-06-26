@@ -1,0 +1,12 @@
+[Unit]
+Description=Coolbx OS — pull vlootconfig (ansible-pull) en pas lokaal toe
+Documentation=https://coolbx.be/
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/coolbx/ansible.conf
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/coolbx-ansible-pull
+# Niet de boot/login blokkeren; faalt stil (volgende tick probeert opnieuw).
+Nice=10

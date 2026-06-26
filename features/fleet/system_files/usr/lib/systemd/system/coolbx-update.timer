@@ -1,0 +1,13 @@
+[Unit]
+Description=Coolbx OS staged update timer (off-hours)
+Documentation=https://coolbx.be/
+
+[Timer]
+# 04:00 lokale tijd; Persistent → toestellen die 's nachts uit staan halen in bij de volgende
+# boot. RandomizedDelaySec spreidt de vloot uit (thundering-herd op de update-server).
+OnCalendar=*-*-* 04:00:00
+Persistent=true
+RandomizedDelaySec=15m
+
+[Install]
+WantedBy=timers.target

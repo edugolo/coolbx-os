@@ -1,0 +1,12 @@
+[Unit]
+Description=Coolbx OS — ansible-pull timer (gespreid, vlootconfig)
+Documentation=https://coolbx.be/
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=1h
+RandomizedDelaySec=30m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

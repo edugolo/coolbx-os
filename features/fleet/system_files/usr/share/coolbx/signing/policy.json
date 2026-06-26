@@ -1,0 +1,18 @@
+{
+  "_comment": "Coolbx OS — STRIKTE on-device handtekening-policy (TEMPLATE, niet actief). Activeer pas NADAT (1) een cosign-keypair bestaat, (2) cosign.pub als /etc/pki/containers/coolbx-os.pub is gebakken, en (3) de CI gesigneerde images naar GHCR pusht — anders weigert bootc elke update (default: reject). Vervang REPLACE_OWNER door de GitHub-owner. Activeren: kopieer naar /etc/containers/policy.json (zie /usr/share/coolbx/signing/README of docs/SIGNING.md).",
+  "default": [{ "type": "reject" }],
+  "transports": {
+    "docker": {
+      "ghcr.io/REPLACE_OWNER/coolbx-os": [
+        {
+          "type": "sigstoreSigned",
+          "keyPath": "/etc/pki/containers/coolbx-os.pub",
+          "signedIdentity": { "type": "matchRepository" }
+        }
+      ]
+    },
+    "containers-storage": {
+      "": [{ "type": "insecureAcceptAnything" }]
+    }
+  }
+}
