@@ -48,83 +48,68 @@ jobs:
             type=raw,value=stable.{{date 'YYYYMMDD'}},enable=${{ github.event_name != 'pull_request' }}
             type=ref,event=pr
 
+      # Bouw in ROOT-storage met een localhost-tag. CRUCIAAL voor rechunk: die mount de image via
+      # `sudo podman create` (root-storage). Een ROOTLESS build (redhat-actions/buildah-build) is daar
+      # ONZICHTBAAR → rechunk pullt dan stil de OUDE remote :stable (podman pull-policy 'missing') en
+      # rechunkt die — de bron van onze "content-drop". Een `localhost/`-naam kan NOOIT van remote
+      # gepulld worden → gegarandeerd de verse build of een luide fout. (Bron: rechunk README "build
+      # using root" + ublue-os/bazzite build.yml.)
       - name: Build image (PRODUCTION — ENABLE_FIRSTBOOT_USER=0)
-        id: build
-        uses: redhat-actions/buildah-build@7a95fa7ee0f02d552a32753e7414641a04307056 # v2
-        with:
-          image: ${{ env.IMAGE_NAME }}
-          tags: ${{ steps.meta.outputs.tags }}
-          containerfiles: ./Containerfile
-          # Dedicated build-args input: each KEY=VALUE is passed as one argv element, so the
-          # space-separated FEATURES value stays a single --build-arg (extra-args woord-split het wél).
-          build-args: |
-            FEATURES=${{ env.FEATURES }}
-            ENABLE_FIRSTBOOT_USER=0
-            FEATURES_CACHEBUST=${{ github.sha }}
-          # bootc container lint runs as the final Containerfile layer.
-          oci: true
-
-      - name: Login to GHCR
-        if: github.event_name != 'pull_request'
-        uses: redhat-actions/podman-login@4934294ad0449894bcd1e9f191899d7292469603 # v1
-        with:
-          registry: ${{ env.IMAGE_REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      # Integriteits-referentie: de pakketset van de VERS gebouwde image, vóór rechunk.
-      - name: Package manifest (pre-rechunk)
-        if: github.event_name != 'pull_request'
         run: |
           set -euo pipefail
-          podman run --rm --entrypoint /usr/bin/rpm \
-            "${IMAGE_REGISTRY}/${IMAGE_NAME}:stable" -qa | sort > /tmp/pkgs-before.txt
-          echo "pre-rechunk: $(wc -l < /tmp/pkgs-before.txt) pakketten"
+          sudo -E buildah build \
+            --tag "localhost/${IMAGE_NAME}:stable" \
+            --build-arg "FEATURES=${FEATURES}" \
+            --build-arg "ENABLE_FIRSTBOOT_USER=0" \
+            --build-arg "FEATURES_CACHEBUST=${{ github.sha }}" \
+            --format oci \
+            -f ./Containerfile .
 
-      # ostree-rechunk → pakket-gegroepeerde chunks → kleinere bootc-upgrade-deltas. ZONDER prev-ref:
-      # die liet op echte hardware nieuw-geïnstalleerde content vallen (iwlwifi-firmware in de buildah-
-      # image maar niet in de rechunk-output). Verse volledige her-chunking = geen diff-gebaseerde drop.
+      # Login in ZOWEL root (skopeo/podman-push) als rootless (cosign leest de user-auth bij signing).
+      - name: Login to GHCR
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+          echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      # ostree-rechunk → pakket-gegroepeerde chunks → kleinere bootc-upgrade-deltas. ref = de LOKALE
+      # localhost-build (root-storage). prev-ref = de remote :stable, enkel voor versie/laag-continuïteit
+      # (delta-updates); beïnvloedt geen content. Ontbreekt prev-ref → overgeslagen (geen prev-ref-fail).
       - name: Rechunk
         id: rechunk
         if: github.event_name != 'pull_request'
         uses: hhd-dev/rechunk@5fbe1d3a639615d2548d83bc888360de6267b1a2 # v1.2.4
         with:
-          ref: ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}:stable
+          ref: localhost/${{ env.IMAGE_NAME }}:stable
+          prev-ref: ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}:stable
           version: stable
           labels: ${{ steps.meta.outputs.labels }}
 
-      # ROBUUSTHEIDS-GATE: laad de rechunk-output en EIS dat de pakketset identiek is aan vóór rechunk.
-      # Vangt elke content-drop af (groene CI shipte 4× een kapotte image — dit maakt 't self-checking).
-      - name: Verify rechunk integrity
-        id: rcimage
-        if: github.event_name != 'pull_request'
-        env:
-          RECHUNK_REF: ${{ steps.rechunk.outputs.ref }}
-        run: |
-          set -euo pipefail
-          image_id="$(podman pull "$RECHUNK_REF")"
-          echo "image_id=${image_id}" >> "$GITHUB_OUTPUT"
-          podman run --rm --entrypoint /usr/bin/rpm "$image_id" -qa | sort > /tmp/pkgs-after.txt
-          echo "post-rechunk: $(wc -l < /tmp/pkgs-after.txt) pakketten"
-          if ! diff -u /tmp/pkgs-before.txt /tmp/pkgs-after.txt; then
-            echo "::error::Rechunk wijzigde de pakketset (content-drop) — build gefaald, niets gepusht."
-            exit 1
-          fi
-          echo "Rechunk-integriteit OK: pakketset identiek ($(wc -l < /tmp/pkgs-after.txt) pakketten)."
-
-      # Push de geverifieerde rechunk-image (podman: oci:-transport correct, --digestfile → cosign).
-      - name: Push by digest
+      # CONTENT-SENTINEL-GATE + push. Mount de rechunk-output (root) en eis dat KRITIEKE bestanden
+      # er zijn én de juiste versie hebben — vangt de storage-mismatch (oude image gerechunkt) die de
+      # rpm-pakketset-check NIET zag (custom /usr/share-files zijn niet rpm-getrackt). Push pas erna.
+      - name: Verify content + push
         id: push
         if: github.event_name != 'pull_request'
         env:
-          IMAGE_ID: ${{ steps.rcimage.outputs.image_id }}
+          REF: ${{ steps.rechunk.outputs.ref }}
           TAGS: ${{ steps.meta.outputs.tags }}
         run: |
           set -euo pipefail
+          img="$(sudo podman pull -q "$REF")"
+          cref="$(sudo podman create "$img" true)"
+          mnt="$(sudo podman mount "$cref")"
+          fail=0
+          sudo test -e "$mnt/usr/share/coolbx/kiosk/apply-scale.sh"        || { echo "::error::sentinel: apply-scale.sh ontbreekt"; fail=1; }
+          sudo test -e "$mnt/usr/lib/firmware/iwlwifi-cc-a0-77.ucode.xz"   || { echo "::error::sentinel: iwlwifi-firmware ontbreekt"; fail=1; }
+          sudo grep -q PKEXEC_UID "$mnt/usr/bin/coolbx-kiosk-start"        || { echo "::error::sentinel: coolbx-kiosk-start is een OUDE versie"; fail=1; }
+          sudo podman umount "$cref" >/dev/null; sudo podman rm "$cref" >/dev/null
+          [ "$fail" = 0 ] || { echo "::error::Rechunk-output mist verse content — niets gepusht."; exit 1; }
+          echo "Content-sentinel OK: verse build correct gerechunkt."
           digest=""
           for tag in $TAGS; do
-            podman tag "$IMAGE_ID" "$tag"
-            podman push --digestfile /tmp/digest "$tag"
+            sudo podman tag "$img" "$tag"
+            sudo podman push --digestfile=/tmp/digest "$tag"
             digest="$(cat /tmp/digest)"
           done
           echo "digest=${digest}" >> "$GITHUB_OUTPUT"
