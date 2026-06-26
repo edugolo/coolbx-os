@@ -1,0 +1,12 @@
+// Coolbx OS — klok-lockdown (Fase 4). Examen-kritiek: een leerling mag de systeemtijd/-zone NIET
+// wijzigen (de server is de tijd-/deadline-autoriteit; geforceerde NTP via chronyd). Enkel beheerders
+// (groep wheel) mogen de klok zetten. NTP zelf in-/uitschakelen is óók geblokkeerd voor niet-wheel.
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.timedate1.set-time" ||
+        action.id == "org.freedesktop.timedate1.set-timezone" ||
+        action.id == "org.freedesktop.timedate1.set-ntp") {
+        if (!subject.isInGroup("wheel")) {
+            return polkit.Result.NO;
+        }
+    }
+});
