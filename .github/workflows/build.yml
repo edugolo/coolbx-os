@@ -91,15 +91,29 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           registry: ${{ env.IMAGE_REGISTRY }}
 
-      # cosign SIGN-BY-DIGEST (not by-tag). Requires the SIGNING_SECRET repo secret
-      # (wachtwoordloze cosign private key). cosign.pub is committed in the repo + baked
-      # into the image at /etc/pki/containers/coolbx.pub (on-device verification).
-      - name: Install cosign
+      # cosign SIGN-BY-DIGEST (not by-tag). Activates automatically once the SIGNING_SECRET
+      # repo secret (wachtwoordloze cosign private key) exists; until then the image is pushed
+      # UNSIGNED (scaffold veilig niet-actief — zie docs/SIGNING.md). cosign.pub is committed in
+      # the repo + baked into the image at /etc/pki/containers/coolbx.pub (on-device verification).
+      - name: Detect signing key
+        id: signing
         if: github.event_name != 'pull_request'
+        env:
+          SIGNING_SECRET: ${{ secrets.SIGNING_SECRET }}
+        run: |
+          if [ -n "$SIGNING_SECRET" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::SIGNING_SECRET niet ingesteld — image UNSIGNED gepusht (zie docs/SIGNING.md)"
+          fi
+
+      - name: Install cosign
+        if: steps.signing.outputs.enabled == 'true'
         uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3.9.2
 
       - name: Sign by digest
-        if: github.event_name != 'pull_request'
+        if: steps.signing.outputs.enabled == 'true'
         env:
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
           DIGEST: ${{ steps.push.outputs.digest }}
