@@ -18,6 +18,10 @@ cosign.key
 # Persoonlijk kladblok (niet versiebeheren)
 NOTES.md
 
+# Python bytecode-cache (test-harness)
+__pycache__/
+*.pyc
+
 # Scratch / editor / OS
 *.log
 *.tmp
