@@ -48,13 +48,15 @@ dnf5 -y install --setopt=install_weak_deps=False --allowerasing "${packages[@]}"
 
 # Hardware-firmware voor brede vlootdekking op WILLEKEURIGE schoollaptops.
 # Sinds Fedora 42/43 is firmware opgesplitst en komt 'm grotendeels via comps-groep
-# `@hardware-support` binnen (precies wat Workstation/Silverblue/ublue-Bluefin leunen). Met
-# install_weak_deps=False mist een kale fedora-bootc die firmware -> geen wifi (bewezen: Intel AX200
-# vond geen iwlwifi-cc-a0 ucode). De GROEP installeert deze als HARDE deps (immuun voor weak-deps),
-# inclusief iwlwifi (dvm/mvm) dat NIET door linux-firmware wordt aanbevolen, plus atheros/realtek/
-# mt7xxx/brcmfmac + amd/intel/nvidia-gpu + sof/cirrus/intel-audio. (Bluefin erft dit van z'n
-# Silverblue-base; wij bouwen op kale fedora-bootc en moeten 'm expliciet trekken.)
+# `@hardware-support` binnen (atheros/realtek/mt7xxx/brcmfmac + amd/intel/nvidia-gpu + sof/cirrus/
+# intel-audio). Met install_weak_deps=False mist een kale fedora-bootc die firmware -> geen wifi.
 dnf5 -y group install hardware-support
+
+# iwlwifi (Intel-wifi) EXPLICIET: zit NIET in de hardware-support-comps van de fedora-bootc:43
+# build-snapshot (bewezen: groep installeerde wél atheros/realtek/mt7xxx maar GEEN iwlwifi -> Intel
+# AX200 bleef zonder iwlwifi-cc-a0-77.ucode). Het pakket levert exact die ucode. dvm=oud, mvm=AX2xx
+# (trekt mld=BE2xx mee). Niet op de groep vertrouwen voor Intel-wifi.
+dnf5 -y install iwlwifi-dvm-firmware iwlwifi-mvm-firmware
 
 # Firefox eruit (we leveren Chromium)
 dnf5 -y remove firefox firefox-langpacks 2>/dev/null || true
