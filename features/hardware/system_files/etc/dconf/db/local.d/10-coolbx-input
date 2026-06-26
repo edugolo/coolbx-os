@@ -1,0 +1,10 @@
+# Coolbx OS — hardware/input-defaults (los van cosmetische branding).
+#
+# Touchpad ALTIJD aan. Nodig op 2-in-1's zoals de Surface Type Cover: die meldt zich
+# óók als 'muis', waardoor GNOME's default ('disabled-on-external-mouse') het touchpad
+# in de GNOME-sessie uitschakelt — terwijl het in GDM en sway wél werkt en de touchscreen
+# altijd werkt. Geverifieerd op Surface Go 2 (waarde stond op 'disabled' → adapter dood in GNOME).
+# tap-to-click voor een prettiger laptop/kiosk-UX.
+[org/gnome/desktop/peripherals/touchpad]
+send-events='enabled'
+tap-to-click=true

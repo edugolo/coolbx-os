@@ -17,7 +17,7 @@ on:
 env:
   IMAGE_NAME: coolbx-os
   IMAGE_REGISTRY: ghcr.io/${{ github.repository_owner }}
-  FEATURES: "kiosk branding fleet attest managed"
+  FEATURES: "kiosk branding hardware fleet attest managed"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
