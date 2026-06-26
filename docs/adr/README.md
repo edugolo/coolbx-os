@@ -32,3 +32,4 @@ oude op status "Vervangen door ADR-XXXX").
 | [0022](0022-fase4-devtools-dev-prod-gating.md) | Fase 4 — DevTools-hardening via dev/prod-gating (DevTools:2 breekt CDP) | Aanvaard (geverifieerd) |
 | [0023](0023-fase5-ci-signing-update.md) | Fase 5 — CI-signing (cosign), staged auto-update & greenboot | Aanvaard (deels geverifieerd) |
 | [0024](0024-attest-hmac-implementatie.md) | Toestel-attestatie HMAC-scaffold — implementatie (ADR-0013) | Aanvaard (geverifieerd) |
+| [0025](0025-nvidia-nouveau-geen-proprietaire-driver.md) | nvidia: nouveau + firmware, géén proprietaire driver (ADR-0019) | Aanvaard (richting) |
