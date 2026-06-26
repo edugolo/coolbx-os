@@ -55,10 +55,12 @@ jobs:
           image: ${{ env.IMAGE_NAME }}
           tags: ${{ steps.meta.outputs.tags }}
           containerfiles: ./Containerfile
-          extra-args: |
-            --build-arg=FEATURES=${{ env.FEATURES }}
-            --build-arg=ENABLE_FIRSTBOOT_USER=0
-            --build-arg=FEATURES_CACHEBUST=${{ github.sha }}
+          # Dedicated build-args input: each KEY=VALUE is passed as one argv element, so the
+          # space-separated FEATURES value stays a single --build-arg (extra-args woord-split het wél).
+          build-args: |
+            FEATURES=${{ env.FEATURES }}
+            ENABLE_FIRSTBOOT_USER=0
+            FEATURES_CACHEBUST=${{ github.sha }}
           # bootc container lint runs as the final Containerfile layer.
           oci: true
 
