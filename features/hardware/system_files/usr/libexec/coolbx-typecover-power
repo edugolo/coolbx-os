@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Houd de Surface Type Cover + z'n USB-poort en host-controller wakker (geen runtime-spaarstand),
+# anders valt het touchpad na inactiviteit weg. Aangeroepen door udev
+# (etc/udev/rules.d/60-coolbx-typecover-power.rules) wanneer de Type Cover verschijnt.
+# Klimt van het USB-apparaat op tot en met de PCI-USB-controller — die laatste is de cruciale laag.
+set -u
+p="/sys${DEVPATH:-}"
+[ -d "$p" ] || exit 0
+while [ "$p" != "/sys" ] && [ -n "$p" ]; do
+  [ -w "$p/power/control" ] && echo on > "$p/power/control" 2>/dev/null || true
+  base="$(basename "$p")"
+  p="$(dirname "$p")"
+  case "$base" in 0000:*) break ;; esac   # stop ná de PCI-controller
+done
