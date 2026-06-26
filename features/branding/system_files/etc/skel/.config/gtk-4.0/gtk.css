@@ -1,0 +1,57 @@
+/* Coolbx OS — GNOME volgt het Coolbx Focus-thema. Accent = merk-mint #50CE96. */
+
+/* ---- licht (Focus light) ---- */
+@define-color accent_bg_color #50CE96;
+@define-color accent_fg_color #141210;
+@define-color accent_color #2e9e6b;
+@define-color window_bg_color oklch(0.984 0.006 85);
+@define-color window_fg_color oklch(0.26 0.015 65);
+@define-color view_bg_color #ffffff;
+@define-color view_fg_color oklch(0.26 0.015 65);
+@define-color headerbar_bg_color oklch(0.984 0.006 85);
+@define-color headerbar_fg_color oklch(0.26 0.015 65);
+@define-color card_bg_color #ffffff;
+@define-color card_fg_color oklch(0.26 0.015 65);
+@define-color popover_bg_color #ffffff;
+@define-color popover_fg_color oklch(0.26 0.015 65);
+@define-color dialog_bg_color #ffffff;
+@define-color sidebar_bg_color oklch(0.965 0.008 84);
+@define-color sidebar_fg_color oklch(0.26 0.015 65);
+@define-color secondary_sidebar_bg_color oklch(0.94 0.008 82);
+
+/* ---- donker (Focus dark) ---- */
+@media (prefers-color-scheme: dark) {
+  @define-color accent_bg_color #50CE96;
+  @define-color accent_fg_color #141210;
+  @define-color accent_color #50CE96;
+  @define-color window_bg_color oklch(0.16 0.004 70);
+  @define-color window_fg_color oklch(0.95 0.008 80);
+  @define-color view_bg_color oklch(0.205 0.004 70);
+  @define-color view_fg_color oklch(0.95 0.008 80);
+  @define-color headerbar_bg_color oklch(0.16 0.004 70);
+  @define-color headerbar_fg_color oklch(0.95 0.008 80);
+  @define-color card_bg_color oklch(0.205 0.004 70);
+  @define-color card_fg_color oklch(0.95 0.008 80);
+  @define-color popover_bg_color oklch(0.205 0.004 70);
+  @define-color popover_fg_color oklch(0.95 0.008 80);
+  @define-color dialog_bg_color oklch(0.205 0.004 70);
+  @define-color sidebar_bg_color oklch(0.185 0.004 70);
+  @define-color sidebar_fg_color oklch(0.95 0.008 80);
+  @define-color secondary_sidebar_bg_color oklch(0.205 0.004 70);
+}
+
+/* Vensterscheiding. LICHT: zachte (lichte) schaduw. DONKER: een zachte LICHTE
+   glow + hairline-rand — een donkere schaduw is onzichtbaar op #141210. */
+window.background,
+window.csd {
+  box-shadow: 0 0 0 1px rgba(20, 18, 16, 0.13),
+              0 4px 16px 0 rgba(0, 0, 0, 0.10);
+}
+@media (prefers-color-scheme: dark) {
+  window.background,
+  window.csd {
+    box-shadow: 0 0 0 1px rgba(250, 248, 243, 0.10),
+                0 0 24px 2px rgba(250, 248, 243, 0.06),
+                0 10px 28px 0 rgba(0, 0, 0, 0.40);
+  }
+}

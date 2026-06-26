@@ -1,0 +1,14 @@
+# Coolbx OS — GDM greeter branding
+[org/gnome/desktop/interface]
+color-scheme='prefer-dark'
+accent-color='green'
+
+[org/gnome/desktop/background]
+picture-uri='file:///usr/share/backgrounds/coolbx/coolbx-login.png'
+picture-uri-dark='file:///usr/share/backgrounds/coolbx/coolbx-login.png'
+picture-options='zoom'
+primary-color='#141210'
+
+[org/gnome/login-screen]
+logo='/usr/share/coolbx/branding/coolbx-wordmark-white.png'
+banner-message-enable=false

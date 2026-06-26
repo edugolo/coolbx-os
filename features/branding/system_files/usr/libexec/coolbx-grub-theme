@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Install the Coolbx GRUB2 theme into the real /boot/grub2 (which on bootc lives
+# outside the container image, so it can only be populated on-device). Idempotent:
+# runs once at first boot, then the ConditionPath in the unit skips it.
+set -euo pipefail
+
+SRC=/usr/share/grub/themes/coolbx
+DST=/boot/grub2/themes/coolbx
+CUSTOM=/boot/grub2/custom.cfg
+
+[ -d "$SRC" ] || { echo "coolbx-grub-theme: bron $SRC ontbreekt"; exit 0; }
+
+# On bootc /boot is mounted read-only; remount rw for the duration, restore after.
+REMOUNTED=0
+if ! touch /boot/.coolbx-wtest 2>/dev/null; then
+    mount -o remount,rw /boot && REMOUNTED=1
+fi
+rm -f /boot/.coolbx-wtest 2>/dev/null || true
+restore_ro() { [ "$REMOUNTED" = 1 ] && mount -o remount,ro /boot 2>/dev/null || true; }
+trap restore_ro EXIT
+
+install -d -m 0755 "$DST"
+cp -rf "$SRC"/. "$DST"/
+
+# custom.cfg wordt door de stock bootc grub.cfg ge-sourcet (41_custom.cfg).
+# Zet hier gfxterm + thema + een korte, zichtbare timeout.
+cat > "$CUSTOM" <<'EOF'
+# Coolbx OS — GRUB branding (via 41_custom.cfg hook)
+insmod all_video
+insmod gfxterm
+insmod png
+if [ "$grub_platform" = "efi" ]; then
+  insmod efi_gop
+  insmod efi_uga
+fi
+if [ -f $prefix/fonts/unicode.pf2 ]; then
+  loadfont $prefix/fonts/unicode.pf2
+fi
+set gfxmode=1920x1080,auto
+set gfxpayload=keep
+terminal_output gfxterm
+set theme=$prefix/themes/coolbx/theme.txt
+export theme
+set timeout=3
+set timeout_style=menu
+EOF
+chmod 0644 "$CUSTOM"
+echo "coolbx-grub-theme: thema geïnstalleerd in $DST + $CUSTOM"

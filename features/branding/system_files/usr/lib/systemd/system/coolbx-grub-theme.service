@@ -1,0 +1,14 @@
+[Unit]
+Description=Coolbx OS — install GRUB2 theme into /boot (first boot)
+DefaultDependencies=no
+After=local-fs.target
+ConditionPathExists=!/boot/grub2/themes/coolbx/theme.txt
+ConditionPathIsDirectory=/boot/grub2
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/coolbx-grub-theme
+
+[Install]
+WantedBy=multi-user.target

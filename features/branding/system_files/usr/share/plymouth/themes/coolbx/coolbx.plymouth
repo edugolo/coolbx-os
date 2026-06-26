@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=Coolbx OS
+Description=Coolbx OS boot splash — pulsing mint wordmark on Focus-dark
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/coolbx
+ScriptFile=/usr/share/plymouth/themes/coolbx/coolbx.script

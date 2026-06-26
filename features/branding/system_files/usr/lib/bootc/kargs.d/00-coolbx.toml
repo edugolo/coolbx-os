@@ -1,0 +1,8 @@
+# Coolbx OS kernel arguments — enable the graphical Plymouth splash.
+# Without rhgb/quiet the boot shows the verbose text console instead of the
+# branded pulsing splash. Serial console stays available for dev.
+# plymouth.ignore-serial-consoles: zonder dit valt Plymouth terug op tekst-modus
+# zodra er een console=ttyS0 (serieel) in de cmdline staat — wat de bootc-image-builder
+# voor qcow2/VM toevoegt. Echte UEFI-laptops hebben geen seriële console; daar is dit
+# een no-op. Met deze param gebruikt Plymouth altijd de grafische (DRM) splash.
+kargs = ["rhgb", "quiet", "splash", "plymouth.ignore-serial-consoles"]

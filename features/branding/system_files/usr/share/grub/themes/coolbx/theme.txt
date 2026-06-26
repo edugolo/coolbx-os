@@ -1,0 +1,32 @@
+# Coolbx OS GRUB2 theme — Focus-dark + mint accent
+# Background carries the "coolbx os" wordmark (baked PNG).
+
+desktop-image: "background.png"
+desktop-color: "#141210"
+title-text: ""
+# GEEN terminal-box → de terminal (Loading-tekst bij kernel-handoff) is transparant,
+# dus de thema-achtergrond schijnt erdoor i.p.v. een zwart vlak (Pop!_OS-aanpak).
+terminal-left: "0"
+terminal-top: "0"
+terminal-width: "100%"
+terminal-height: "100%"
+terminal-border: "0"
+
+# --- boot menu ---
++ boot_menu {
+    left   = 30%
+    top    = 38%
+    width  = 40%
+    height = 42%
+
+    item_color           = "#968E82"
+    selected_item_color  = "#50CE96"
+    item_height          = 46
+    item_padding         = 8
+    item_spacing         = 6
+    icon_width           = 0
+    icon_height          = 0
+    scrollbar = false
+}
+
+# (geen spinner — bewust weggelaten; het menu telt zelf af en boot)
