@@ -25,3 +25,10 @@ oude op status "Vervangen door ADR-XXXX").
 | [0015](0015-s2-chromium-managed-storage.md) | S2: Chromium managed-storage + enforcement op Fedora (bevestigd) | Aanvaard |
 | [0016](0016-s3-vt-lockdown.md) | S3: VT-lockdown via VT_LOCKSWITCH (kiosk escape-resistant) | Aanvaard |
 | [0017](0017-s4-update-rollback-powerwash.md) | S4: bootc update/rollback/powerwash haalbaarheid | Aanvaard |
+| [0018](0018-logo-rebranding-generic-logos.md) | Logo-rebranding: Fedora-trademark eruit via generic-logos (ublue-os) | Aanvaard (richting) |
+| [0019](0019-secure-boot-geen-custom-modules.md) | Secure Boot zonder eigen MOK-key — geen out-of-tree kernelmodules | Aanvaard (richting) |
+| [0020](0020-e2e-dev-automation-harness.md) | e2e dev-automation-harness — host-gedreven (QMP+CDP+OCR+pytest) | Aanvaard (gebouwd) |
+| [0021](0021-fase2-force-install-geverifieerd.md) | Fase 2 — force-install + managed-storage geverifieerd tegen productie | Aanvaard (geverifieerd) |
+| [0022](0022-fase4-devtools-dev-prod-gating.md) | Fase 4 — DevTools-hardening via dev/prod-gating (DevTools:2 breekt CDP) | Aanvaard (geverifieerd) |
+| [0023](0023-fase5-ci-signing-update.md) | Fase 5 — CI-signing (cosign), staged auto-update & greenboot | Aanvaard (deels geverifieerd) |
+| [0024](0024-attest-hmac-implementatie.md) | Toestel-attestatie HMAC-scaffold — implementatie (ADR-0013) | Aanvaard (geverifieerd) |

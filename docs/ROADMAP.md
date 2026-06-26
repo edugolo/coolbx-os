@@ -121,10 +121,16 @@ Vrije modus = "play": gewoon-toestel-gevoel; kiosk = "focus": vergrendeld. Het O
 - Aparte generieke `kiosk`-user, los van de GNOME-gast. Identiteit komt van Focus (join/herneemcode).
 
 ### Updates, rollback & powerwash (eindgebruiker, geen terminal)
-- **Updates onzichtbaar/automatisch**; **mask** `bootc-fetch-apply-updates.timer`, eigen off-hours timer met
-  `Persistent=true` (toestellen die 's nachts uit staan → inhalen bij volgende boot/idle).
+- **Updates onzichtbaar/automatisch**; **mask** `bootc-fetch-apply-updates.timer`. Voorkeur: **uupd direct gebruiken**
+  (COPR `ublue-os/packages`, `systemctl enable uupd.timer`) i.p.v. zelf bouwen — het **staget enkel** (`bootc upgrade`,
+  **nooit** `--apply`/reboot) en levert gratis **hardware-gating** (batterij/AC/load/bandbreedte vóór het update). Timer:
+  `OnCalendar=04:00` + `Persistent=true` (nacht-uit → inhalen) + `RandomizedDelaySec=15m` (thundering-herd op de update-server).
+  Staged-zonder-reboot = exact onze "nooit rebooten midden in een toets"-eis; de leerling reboot op een natuurlijk moment.
 - **Greenboot (greenboot-rs)** = vangnet: health-checks **lokaal only** ("greeter start", "kiosk-unit start") —
-  **nooit** "focus-api bereikbaar" (externe outage zou de hele vloot doen terugrollen). Auto-rollback na N gefaalde boots.
+  **nooit** "focus-api bereikbaar" (externe outage zou de hele vloot doen terugrollen — door UBlue-onderzoek bevestigd
+  als de juiste stance). `GREENBOOT_MAX_BOOT_ATTEMPTS=3`, eigen checks in `/etc/greenboot/check/required.d/`. Auto-rollback na N gefaalde boots.
+- **Deployment-pinning per examenperiode:** `ostree admin pin <index>` zet de bekend-goede deployment vast (niet
+  weg-gegarbagecollect) zodat een tussentijdse OTA nooit een examen-kritieke werkende staat overschrijft. `bootc rollback` = handmatige escape.
 - **Knoppen zonder terminal:** oneshot-units `coolbx-update`/`coolbx-rollback`/`coolbx-powerwash` achter een polkit
   `manage-units`-rule (uupd-patroon); GTK-knopje of Cockpit doet `systemctl start`.
 - **Powerwash:** `bootc install reset --experimental --apply` (verse `/etc`, lege `/var`); **fallback** gedocumenteerd
@@ -147,6 +153,9 @@ Vrije modus = "play": gewoon-toestel-gevoel; kiosk = "focus": vergrendeld. Het O
 **Fast-follow (na pilot, vóór "waterdicht"-claim):**
 - **Anti-live-USB/fysiek:** UEFI Secure Boot AAN + **firmware-wachtwoord** + bootmenu-lock; **GRUB-wachtwoord** op edit;
   `kernel.sysrq=0`; Ctrl+Alt+Del masken. (Zonder firmware-pw is Secure Boot uit te zetten → alles waardeloos.)
+  **Géén eigen Secure-Boot-key/MOK-enrollment nodig** zolang we **geen out-of-tree kernelmodules** bouwen — Fedora's
+  gesigneerde shim+kernel blijven geldig. Bewust zo houden: `mokutil`-MOK-enroll is fysiek/interactief per toestel
+  (firmware-prompt) en schaalt niet in de FOG-massauitrol. → [ADR-0019](../docs/adr/0019-secure-boot-geen-custom-modules.md).
 - **Anti-spoofing via HMAC-handshake ([ADR-0013](../docs/adr/0013-anti-spoofing-hmac-per-device.md)):** hergebruik
   Focus' bestaande **HMAC-SHA256 handshake-schema**, maar met een **per-toestel-secret** dat bij enrollment wordt
   uitgedeeld en **root-only** (`0600 root`) bewaard, gesigneerd door een **OS-agent** (native-messaging-host, `allowed_origins`
@@ -204,10 +213,15 @@ Bewijs in de VM, machine-leesbaar, vóór fasen "af" heten:
 4. **S4 update-spike:** bestaat `bootc install reset --experimental` op de base? werkt greenboot-rs auto-rollback op het bootc-pad? → anders fallbacks.
 
 ### Fase 2 — Chromium-policy + enforcement (productie-vorm van S2)
-Eén policy-JSON `system_files/etc/chromium/policies/managed/coolbx-focus.json`: `ExtensionSettings.<ID>`
-(`force_installed` + `update_url` + `override_update_url`) **+ `3rdparty.extensions.<ID>`** (`serverUrl`, `kioskMode`)
-**+ de enforcement-keys**. `<ID>` = `makdakigkdbicdljgdclgnejachcohag`. **Harde dependency-gate:** Focus-team levert
-ondertekende `.crx` + bereikbare `update.xml` (anders blokkeert force-install — externe blocker).
+✅ **Force-install + managed-storage GEVERIFIEERD tegen productie** ([ADR-0021](../docs/adr/0021-fase2-force-install-geverifieerd.md),
+`tests/test_06_focus_contract.py` groen): `coolbx-managed.json` met `ExtensionSettings.<ID>` (`force_installed` +
+live `update_url` + `override_update_url`) **+ `3rdparty.extensions.<ID>`** (`serverUrl`/`kioskMode`). De live
+`update.xml` serveert de echte `.crx` v0.14.0 → Chromium installeert + levert de managed-waarden af (chrome://policy
+status OK) → de extensie reageert op `kioskMode`. **Géén externe blocker** (dashboard is live); integratietest is wel
+connectiviteits-afhankelijk. `<ID>` = `makdakigkdbicdljgdclgnejachcohag`.
+⏳ **Nog open: de enforcement-policy-set** (`coolbx-enforcement.json`): DeveloperToolsAvailability, IncognitoModeAvailability,
+DownloadRestrictions, BrowserGuestModeEnabled, file://-blok. ⚠️ Eerst onderzoeken of `DeveloperToolsAvailability:2`
+de CDP-debugpoort/e2e-harness breekt; scopen (globaal-veilige keys vs kiosk-only URL-blocking).
 
 ### Fase 3 — Vergrendelde kiosk-sessie (sway + waybar + Chromium)
 `coolbx-kiosk-start` (port van de `systemd-run`/VT-mechaniek uit POC `features/focus-mode/system_files/usr/bin/start-focus`,
@@ -217,31 +231,67 @@ met max-restart-rate + fail-closed scherm bij crash-loop. waybar "Sessie afsluit
 sway.conf + logind-config + `SWAYSOCK`-afscherming + multi-output-mirror als artefacten. polkit `49-coolbx-kiosk.rules` (één action-id).
 
 ### Fase 4 — Hardening + vrije-modus + a11y
-Kiosk-jail (zie security v1), vrije-modus capability-matrix toepassen (dconf-lockdown pragmatisch), klok-lockdown,
-accessibility-laag. GNOME-gast onbereikbaar tijdens kiosk.
+✅ **DevTools-block (de #1 cheat-vector) — dev/prod-gated, geverifieerd** ([ADR-0022](../docs/adr/0022-fase4-devtools-dev-prod-gating.md)):
+threat-probe toonde dat F12/Ctrl+Shift+I gewoon DevTools opent in de kiosk → `DeveloperToolsAvailability:2` in
+`coolbx-hardening-prod.json` (prod), in dev verwijderd door `install.sh`/`vm-sync` (want het breekt óók `Runtime.evaluate`/CDP
+— harness). Build-gating bewezen (prod-image heeft de key, dev niet). Globaal-veilige enforcement (`coolbx-enforcement.json`:
+Incognito/GuestMode/BackgroundMode) geldt in álle builds. Harness robuust gemaakt (first_page skipt extensie-pagina's, policy-poll).
+✅ **`file://`-blok** (`URLBlocklist file://*`) ook in `coolbx-hardening-prod.json` — runtime-geverifieerd: `/etc/passwd`
+geblokkeerd, prod-kiosk laadt https. ✅ **Klok-lockdown** (`managed`-feature, `test_10`): polkit weigert
+`timedate1.set-time/-timezone/-ntp` voor niet-wheel + geforceerde NTP (chronyd) → leerling kan de examentijd niet manipuleren.
+⏳ **Nog open in Fase 4 (lager/productbeslissing):** brede dconf-lockdown vrije modus (gschema-override + locks/), downloads/print-policy,
+prod-runtime-verificatie van de DevTools-block (QMP-F12+screendump, want CDP is dan dood), GNOME-gast onbereikbaar tijdens kiosk, a11y.
+**dconf-aanpak (UBlue-patroon):** schrijf defaults als
+**gschema-override** (de enige bron), valideer met `glib-compile-schemas --strict` in een wegwerp-dir (vangt typefouten
+vóór ship), en gebruik **`db/distro.d/locks/`** om kiosk-relevante keys **hard te vergrendelen** tegen wijziging
+(sterker dan losse db-keyfiles handmatig schrijven).
 
 ### Fase 5 — Signing, policy.json, auto-update + **canary**
-CI (port POC `build.yml` — **verifieer dat de cosign-sign-stap er effectief in zit**): buildah → GHCR
-`ghcr.io/<owner>/coolbx-os`, sign-by-digest, enkel default branch. **Canary-tags `:testing`/`:stable`.** policy.json
-(`default: reject`, `keyPaths` ×2, key-recovery), `registries.d`, public key. Off-hours update-timer (`Persistent=true`).
-greenboot-rs + **lokale** `required.d`-checks. BIB-image **gepind** (niet `:latest`).
+✅ **GROTENDEELS GEBOUWD + (deels) geverifieerd** ([ADR-0023](../docs/adr/0023-fase5-ci-signing-update.md), `test_07_fleet.py`):
+`.github/workflows/build.yml` (GHCR + cosign sign-by-digest, prod-build, dagelijkse cron, rechunk, SHA-gepind, `:stable`/PR-gating);
+`fleet`-feature met **staged auto-update** (default-timer masked, `coolbx-update.timer` stage-only 04:00+Persistent+jitter) en
+**greenboot** (lokale required.d-check, géén focus-api) — beide koude-boot-geverifieerd. **Signing-scaffold** veilig niet-actief
+(`docs/SIGNING.md`) tot de cosign-keypair bestaat. ⏳ **Jouw eenmalige opzet:** cosign-keypair + `SIGNING_SECRET`-secret +
+`cosign.pub` committen → policy activeren. **Canary:** `:testing`-ring nog te promoten. **Renovate** + BIB-pin nog toe te voegen.
+
+CI (start van `ublue-os/image-template:build.yml` — één image, **géén** multi-flavor matrix): buildah → GHCR
+`ghcr.io/<owner>/coolbx-os`, **cosign sign-by-digest** (`--digestfile` → `cosign sign @${DIGEST}`), login/push/sign
+**`if`-gated** op default branch (PR's bouwen maar publiceren/signen nooit). **Dagelijkse `schedule`-cron** zodat
+fedora-bootc-CVE-fixes automatisch doorvloeien naar de vloot; **actions SHA-gepind + Renovate**. **Canary-tags
+`:testing`/`:stable`.** On-device: `policy.json` (`default: reject` + `sigstoreSigned`/`matchRepository`, `keyPaths` ×2
+voor rotatie, key-recovery) + `registries.d` (**`use-sigstore-attachments: true`**) + `/etc/pki/containers/coolbx.pub`.
+**Rechunk tussen build en push** (`rpm-ostree compose build-chunked-oci --max-layers 127 --bootc`, root) → pakket-gegroepeerde
+lagen → veel kleinere `bootc upgrade`-deltas (cruciaal voor laptops over schoolnet). **`bootc container lint`** als laatste
+Containerfile-laag (faalt non-conforme builds). Off-hours update-timer (`Persistent=true`). greenboot-rs + **lokale**
+`required.d`-checks. BIB-image **gepind** (niet `:latest`). *(SBOM/provenance = optioneel, later; past bij het scholen-vertrouwensverhaal.)*
 
 ### Fase 5b — Deployment FOG-flow — *niet prioritair, latere fase*
-Interactieve Anaconda-ISO (master) → `coolbx-generalize` (sysprep: machine-id=`uninitialized\n`, SSH-keys, logs,
-`/var/lib/coolbx/*`, ansible-state) → FOG capture → deploy → first-boot regen (machine-id/hostname/growfs) → OTA.
-Master-rootfs `ext4` (parametriseer `--rootfs`; draai ≥1 ext4-build in de loop). Validatie van OTA-na-kloon = later.
+Interactieve Anaconda-ISO (master) via BIB `--type anaconda-iso`, naar het `ublue-os` `iso-gnome.toml`-patroon:
+Anaconda-modules **disabled** (Network/Security/Services/Users/Subscription/Timezone), enkel **Storage+Runtime** →
+minimale snelle installer; kickstart-post `bootc switch --mutate-in-place --transport registry ghcr.io/<owner>/coolbx-os:stable`
+zodat de master meteen op het juiste OTA-kanaal staat. Daarna `coolbx-generalize` (sysprep: machine-id=`uninitialized\n`,
+SSH-keys, logs, `/var/lib/coolbx/*`, ansible-state — **ons eigen werk**, UBlue kloont niet) → FOG capture → deploy →
+first-boot regen (machine-id/hostname/growfs) → OTA. Master-rootfs `ext4` (parametriseer `--rootfs`; bevestig dat FOG
+btrfs aankan, anders ext4 forceren; draai ≥1 ext4-build in de loop). Validatie van OTA-na-kloon = later.
 
 ### Fase 6 — Vlootbeheer via ansible-pull (strak gescoped)
-Port `ansible-pull.timer/.service` → `github.com/edugolo/ansible`. **Enkel** runtime/per-rol-config (groep, netwerk/printer,
-ring-toewijzing, kleine toggles) — **niet** software/kernconfig (die in image). Groepstoewijzing: hoe krijgt toestel #347
-zijn `laptop-group`? (FOG/host_vars/handmatig — `[te bevestigen]`). Idempotent, minimaal. Vendoring i.p.v. netwerk-call in build.
+✅ **GEBOUWD + koude-boot-geverifieerd** (`fleet`-feature, `test_08_ansible.py`, 32/32): `coolbx-ansible-pull`
+(system-oneshot) + `.timer` (OnBoot+1h, Persistent, jitter). **Configureerbare repo** via `/etc/coolbx/ansible.conf`
+(no-op zolang placeholder → veilig default, geen rebuild nodig om te activeren). Rol via `/usr/share/coolbx/ansible/laptop-group`
+(default `leerlingen`) → meegegeven als `coolbx_group`-extra-var zodat `local.yml` per rol vertakt. **Strak gescoped**
+(test bewaakt: geen dnf/rpm/bootc in de puller). Mechaniek bewezen: pull → apply → **idempotent** (`changed=1`→`changed=0`).
+⏳ **Jouw kant:** de echte playbook-repo (`github.com/edugolo/coolbx-ansible` met `local.yml`) + de URL in `ansible.conf`/ansible
+zetten. Groepstoewijzing per toestel (FOG/host_vars/handmatig) — `[te bevestigen]`.
 
 ### Fase 7 — Branding (play↔focus)
 Eigen OS-glyph + accent (géén schild) rond de **play↔focus-dualiteit**; Plymouth/GDM/os-release vroeg zetten zodat
 latere fasen niet op "generieke Fedora" testen. `generate.sh`-pijplijn als "branding"-feature. Hero-art = designpass (ik scaffold).
 
 ### Fase 8 — Observability & support  *(nieuw)*
-Lokale vlootstatus (Cockpit), support-/escalatiepad, `[te bevestigen]` centrale telemetrie.
+✅ **`coolbx-status` gebouwd + geverifieerd** (`fleet`-feature, `test_11`): lokaal overzicht voor schoolIT —
+OS-image, update-stand (gestaged/volgende run), boot-gezondheid (greenboot), kiosk-/Focus-gereedheid, attestatie-daemon,
+toestel-ID, gefaalde units. **Bewust geen open admin-poort** (Cockpit = gevlagde optie, firewall-naar-schoolnet).
+⏳ Nog: support-/escalatiepad, `[te bevestigen]` centrale telemetrie (privacy — minderjarigen).
 
 ### Fase 9 — Pilot & school-documentatie  *(nieuw)*
 School-/admin-docs (enrollment, reset, wifi, troubleshooting). Pilot op canary-ring met echte toestellen + feedback → breed accountmodel beslissen.

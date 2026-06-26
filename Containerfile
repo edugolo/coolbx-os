@@ -45,9 +45,15 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     /ctx/build_files/03-gnome-dconf.sh
 
 # 5) Optionele features (modulair — ADR-0012)
+# FEATURES_CACHEBUST: een --mount=type=bind invalideert de laag NIET bij gewijzigde
+# bestandsinhoud (alleen het commando telt). Daarom busten de build-recepten deze laag
+# expliciet met een wisselende waarde, zodat feature-edits altijd doorkomen.
+ARG FEATURES_CACHEBUST=""
 RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=cache,dst=/var/cache \
     --mount=type=tmpfs,dst=/tmp \
+    echo "cachebust=${FEATURES_CACHEBUST}" >/dev/null && \
+    ENABLE_FIRSTBOOT_USER=${ENABLE_FIRSTBOOT_USER} \
     /ctx/build_files/install-features.sh "${FEATURES}"
 
 # 6) Lint
