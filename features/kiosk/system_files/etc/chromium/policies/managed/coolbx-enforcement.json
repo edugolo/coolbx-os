@@ -1,0 +1,7 @@
+{
+  "_comment": "Coolbx OS — Chromium enforcement (Fase 4): globaal-veilige keys voor ALLE Chromium-instanties (kiosk + vrije modus). Enkel keys die geen legitiem vrije-modus-gebruik breken EN de e2e-harness (CDP/Runtime.evaluate) NIET blokkeren. DeveloperToolsAvailability:2 hoort hier NIET — dat blokkeert Runtime.evaluate (geverifieerd) → in het prod-only coolbx-hardening-prod.json (dev/prod-gated, ADR-0022). file://-blok + downloads = Fase-4-follow-up.",
+
+  "IncognitoModeAvailability": 1,
+  "BrowserGuestModeEnabled": false,
+  "BackgroundModeEnabled": false
+}

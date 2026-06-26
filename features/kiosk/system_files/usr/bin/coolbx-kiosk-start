@@ -21,6 +21,16 @@ mount -t tmpfs -o "mode=0700,uid=${KIOSK_USER},gid=${KIOSK_USER}" tmpfs "$KIOSK_
 chown "$KIOSK_USER":tty "$KIOSK_TTY" 2>/dev/null || true
 chmod 620 "$KIOSK_TTY" 2>/dev/null || true
 
+# DEV-ONLY (ADR-0020): forward de CDP-debugvlag door systemd-run heen naar de sway-sessie
+# (systemd-run start met schone env). Prod zet COOLBX_KIOSK_DEBUG nooit → leeg → geen effect.
+DEBUG_ENV=()
+if [ "${COOLBX_KIOSK_DEBUG:-0}" = "1" ]; then
+  DEBUG_ENV+=(--property=Environment="COOLBX_KIOSK_DEBUG=1")
+fi
+if [ -n "${COOLBX_KIOSK_LOAD_EXT:-}" ]; then
+  DEBUG_ENV+=(--property=Environment="COOLBX_KIOSK_LOAD_EXT=${COOLBX_KIOSK_LOAD_EXT}")
+fi
+
 # HOME/XDG_RUNTIME_DIR worden door pam_systemd gezet (niet via Environment= forceren).
 systemd-run --unit=coolbx-kiosk --collect \
   --property=User="$KIOSK_USER" \
@@ -36,6 +46,7 @@ systemd-run --unit=coolbx-kiosk --collect \
   --property=Environment="XKB_DEFAULT_LAYOUT=be" \
   --property=Environment="LANG=nl_BE.UTF-8" \
   --property=Environment="COOLBX_KIOSK_URL=${URL}" \
+  "${DEBUG_ENV[@]}" \
   --property="ExecStopPost=+/usr/bin/coolbx-kiosk-return ${RETURN_VT}" \
   /usr/bin/sway -c /usr/share/coolbx/kiosk/sway.conf
 

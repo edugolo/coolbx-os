@@ -1,0 +1,6 @@
+{
+  "_comment": "Coolbx OS — PROD-ONLY Chromium-hardening (Fase 4, ADR-0022). DEZE keys breken bewust de dev-tooling/placeholder en worden in DEV-builds VERWIJDERD door features/kiosk/install.sh (ENABLE_FIRSTBOOT_USER=1) + door `just vm-sync`. (1) DeveloperToolsAvailability:2 — blokkeert F12/Ctrl+Shift+I (geverifieerd) maar óók de functionele CDP (Runtime.evaluate) → vandaar dev/prod-gating. (2) URLBlocklist file://* — blokkeert lokaal-bestand-lezen (file:///etc/passwd → geblokkeerd, geverifieerd). De PROD-kiosk laadt een https-URL, dus dit raakt geen legitiem gebruik; enkel de dev-placeholder gebruikt file:// (daarom dev-gated, geen URLAllowlist-gepruts nodig).",
+
+  "DeveloperToolsAvailability": 2,
+  "URLBlocklist": ["file://*"]
+}

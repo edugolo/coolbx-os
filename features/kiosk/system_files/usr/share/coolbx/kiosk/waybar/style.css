@@ -1,47 +1,43 @@
-/* Coolbx kiosk-balk — strak, in de coolbx-stijl (inkt/papier). */
+/* Coolbx kiosk-balk — pixel/font-gelijk aan de GNOME-topbalk (#panel):
+   bg #050000, Cantarell bold, wit. Alleen brand-accent + exit zijn coolbx. */
 * {
-  font-family: "DejaVu Sans", "Noto Sans", sans-serif;
-  font-size: 13px;
-  font-weight: 500;
+  font-family: "Cantarell", "DejaVu Sans", sans-serif;
+  font-size: 15px;
+  font-weight: bold;
   border: none;
   border-radius: 0;
   min-height: 0;
 }
 
 window#waybar {
-  background: #2b2620;       /* inkt */
-  color: #faf8f3;            /* papier */
+  background: #050000;       /* = GNOME #panel */
+  color: #ffffff;
 }
 
 #custom-brand {
-  font-weight: 700;
-  font-size: 14px;
-  letter-spacing: 0.3px;
-  padding: 0 22px;
-  color: #faf8f3;
+  padding: 0 16px;
+  color: #ffffff;
 }
 
 #clock {
-  color: #ded7c9;
-  letter-spacing: 0.5px;
+  color: #ffffff;
 }
 
 #network,
 #battery {
-  padding: 0 16px;
-  color: #b8b0a1;
+  padding: 0 10px;
+  color: #ffffff;
 }
 
 #custom-exit {
-  margin: 6px 14px 6px 8px;
-  padding: 0 18px;
-  border-radius: 15px;
-  background: #3a332b;
-  color: #faf8f3;
-  font-weight: 600;
+  margin: 3px 12px 3px 8px;
+  padding: 0 16px;
+  border-radius: 999px;      /* = GNOME panel-button pill */
+  background: rgba(255, 255, 255, 0.10);
+  color: #ffffff;
 }
 
 #custom-exit:hover {
   background: #e8902a;       /* amber accent bij hover */
-  color: #2b2620;
+  color: #050000;
 }

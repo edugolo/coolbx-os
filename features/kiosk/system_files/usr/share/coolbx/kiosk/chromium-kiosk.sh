@@ -9,8 +9,38 @@ BIN="$(command -v chromium-browser || command -v chromium || true)"
 [ -n "$BIN" ] || { echo "geen chromium gevonden" >&2; exit 1; }
 PROFILE="${XDG_RUNTIME_DIR:-$HOME}/coolbx-chrome"
 
+# DEV-ONLY (ADR-0020): CDP-debugpoort voor de e2e-harness. NOOIT in productie —
+# een open remote-debugging-port in een toetskiosk = volledige browsercontrole
+# (valsspeel-vector). Enkel actief als de dev-VM COOLBX_KIOSK_DEBUG=1 zet; de
+# prod-image zet die env nooit. user-data-dir (niet-default) is sowieso al gezet,
+# wat Chrome 136+ vereist; --remote-allow-origins is nodig vanaf Chrome 111.
+DEBUG_FLAGS=()
+if [ "${COOLBX_KIOSK_DEBUG:-0}" = "1" ]; then
+  echo "WAARSCHUWING: CDP-debugpoort 9222 actief (COOLBX_KIOSK_DEBUG=1) — DEV ONLY" >&2
+  DEBUG_FLAGS=(
+    --remote-debugging-port=9222
+    --remote-allow-origins=http://127.0.0.1:9222
+  )
+fi
+# DEV-ONLY: laad de Focus-extensie UNPACKED uit een pad (test van managed-storage tegen de
+# echte extensie zonder de productie-force-install/.crx). Productie gebruikt force-install
+# via ExtensionSettings (update.xml). NOOIT in prod — env wordt daar nooit gezet.
+if [ -n "${COOLBX_KIOSK_LOAD_EXT:-}" ] && [ -d "${COOLBX_KIOSK_LOAD_EXT}" ]; then
+  echo "DEV: unpacked extensie laden uit ${COOLBX_KIOSK_LOAD_EXT}" >&2
+  DEBUG_FLAGS+=(
+    "--load-extension=${COOLBX_KIOSK_LOAD_EXT}"
+    "--disable-extensions-except=${COOLBX_KIOSK_LOAD_EXT}"
+  )
+fi
+
 n=0
 while [ "$n" -lt 10 ]; do
+  # Singleton afdwingen: ruim een eventueel nog draaiende chromium voor DIT profiel op.
+  # Anders draagt een nieuwe start z'n URL over aan de bestaande instance (singleton-handoff),
+  # keert meteen terug, en zou deze herstart-loop stapels --app-vensters openen.
+  pkill -f -- "--user-data-dir=$PROFILE" 2>/dev/null && sleep 1 || true
+
+  start=$SECONDS
   "$BIN" \
     --ozone-platform=wayland \
     --user-data-dir="$PROFILE" \
@@ -20,8 +50,12 @@ while [ "$n" -lt 10 ]; do
     --no-first-run --no-default-browser-check \
     --disable-session-crashed-bubble --disable-infobars \
     --start-maximized \
+    "${DEBUG_FLAGS[@]}" \
     --app="$URL" || true
-  n=$((n + 1))
+
+  # Te snel terug (<5s) = handoff of directe crash → tel als faal (anti-spin);
+  # een normale, langere sessie reset de teller zodat één late crash niet meetelt.
+  if [ $(( SECONDS - start )) -lt 5 ]; then n=$((n + 1)); else n=0; fi
   sleep 1
 done
 

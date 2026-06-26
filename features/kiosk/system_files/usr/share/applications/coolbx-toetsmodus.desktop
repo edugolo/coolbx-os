@@ -3,6 +3,6 @@ Type=Application
 Name=Toetsmodus
 Comment=Start de vergrendelde Coolbx-toetsmodus
 Exec=pkexec /usr/bin/coolbx-kiosk-start
-Icon=applications-education
+Icon=coolbx-focus
 Terminal=false
 Categories=Education;

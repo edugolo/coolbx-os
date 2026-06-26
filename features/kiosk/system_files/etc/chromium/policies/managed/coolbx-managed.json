@@ -1,10 +1,18 @@
 {
-  "_comment": "Globale Chromium-policy: enkel managed-storage voor de Focus-extensie (ADR-0011/0015). GEEN globale URLBlocklist — dat zou ook de vrije-modus-browser dichttimmeren; de kiosk-lockdown komt van de sessie (sway --kiosk) + de extensie/egress.",
+  "_comment": "Coolbx OS — Chromium managed-policy voor de Focus-extensie (ADR-0011/0015/0024). Globaal voor alle Chromium-instanties: force-install van de productie student-extensie + de managed-storage serverUrl. LET OP: kioskMode staat hier BEWUST NIET — een globale vlag zou de extensie óók in de vrije GNOME-modus 'kiosk' laten denken (de join/proctoring-UI verscheen daar). Op Coolbx OS is het kiosk-signaal de per-sessie attest-claim (session=kiosk via SO_PEERCRED, coolbx-attestd). kioskMode blijft enkel het ChromeOS-MGS-pad (zie docs/ATTESTATION.md). GEEN globale URLBlocklist hier; de enforcement-set staat in coolbx-enforcement.json.",
+
+  "ExtensionSettings": {
+    "makdakigkdbicdljgdclgnejachcohag": {
+      "installation_mode": "force_installed",
+      "update_url": "https://focus-dashboard.edugolo.be/extension-updates/update.xml",
+      "override_update_url": true
+    }
+  },
+
   "3rdparty": {
     "extensions": {
       "makdakigkdbicdljgdclgnejachcohag": {
-        "serverUrl": "https://focus-api.edugolo.be",
-        "kioskMode": true
+        "serverUrl": "https://focus-api.edugolo.be"
       }
     }
   }

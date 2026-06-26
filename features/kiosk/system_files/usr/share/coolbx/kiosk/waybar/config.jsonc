@@ -1,7 +1,7 @@
 {
   "layer": "top",
   "position": "top",
-  "height": 38,
+  "height": 32,
   "spacing": 0,
   "margin-top": 0,
   "modules-left": ["custom/brand"],
@@ -9,11 +9,11 @@
   "modules-right": ["network", "battery", "custom/exit"],
 
   "custom/brand": {
-    "format": "coolbx <span foreground='#e8902a'>·</span> toetsmodus",
+    "format": "coolbx <span foreground='#e8902a'>focus</span>",
     "tooltip": false
   },
   "clock": {
-    "format": "{:L%A %e %B  ·  %H:%M}",
+    "format": "{:L%a %e %b  %H:%M}",
     "locale": "nl_BE.UTF-8",
     "tooltip": false
   },
