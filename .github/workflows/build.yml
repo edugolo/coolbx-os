@@ -88,7 +88,8 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
 
       # Push de GERECHUNKTE OCI-output (steps.rechunk.outputs.ref = oci:<dir>) naar alle tags.
-      # skopeo copy is de juiste tool voor de oci:-transport; --digestfile levert de digest voor cosign.
+      # podman laadt de oci:-transport correct (skopeo struikelde over de oci:<dir>-ref-parsing);
+      # --digestfile levert de push-digest voor cosign. podman-login zette de auth al klaar.
       - name: Push rechunked image
         id: push
         if: github.event_name != 'pull_request'
@@ -97,12 +98,13 @@ jobs:
           TAGS: ${{ steps.meta.outputs.tags }}
         run: |
           set -euo pipefail
-          command -v skopeo >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq skopeo; }
+          image_id="$(podman pull "$RECHUNK_REF")"
+          echo "Geladen rechunked image: ${image_id}"
           digest=""
           for tag in $TAGS; do
             echo "→ push ${tag}"
-            skopeo copy --retry-times 3 --digestfile /tmp/digest \
-              "$RECHUNK_REF" "docker://${tag}"
+            podman tag "$image_id" "$tag"
+            podman push --digestfile /tmp/digest "$tag"
             digest="$(cat /tmp/digest)"
           done
           echo "digest=${digest}" >> "$GITHUB_OUTPUT"
