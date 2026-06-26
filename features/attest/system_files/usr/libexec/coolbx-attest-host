@@ -1,0 +1,66 @@
+#!/usr/bin/env python3
+"""Coolbx OS — Chromium native-messaging-host voor toestel-attestatie (ADR-0013).
+
+Draait als de kiosk-user (kind van Chromium). De Focus-extensie stuurt {"challenge": <server-nonce>};
+wij forwarden naar de root-daemon coolbx-attestd en geven {"deviceId", "signature"} terug. Zo blijft
+het secret in het root-proces en kan de extensie tóch een geldige HMAC-handshake doen.
+
+Native-messaging-wire: 4-byte little-endian uint32 lengte-prefix + JSON-body op stdin/stdout.
+"""
+import json
+import socket
+import struct
+import sys
+
+SOCK_PATH = "/run/coolbx-attest.sock"
+MAX_MSG = 1024 * 1024  # 1 MiB veiligheidslimiet
+
+
+def read_msg():
+    raw = sys.stdin.buffer.read(4)
+    if len(raw) < 4:
+        return None
+    n = struct.unpack("<I", raw)[0]
+    if n <= 0 or n > MAX_MSG:
+        return None
+    return json.loads(sys.stdin.buffer.read(n).decode("utf-8"))
+
+
+def write_msg(obj):
+    data = json.dumps(obj).encode("utf-8")
+    sys.stdout.buffer.write(struct.pack("<I", len(data)))
+    sys.stdout.buffer.write(data)
+    sys.stdout.buffer.flush()
+
+
+def sign(challenge):
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.settimeout(5)
+    s.connect(SOCK_PATH)
+    s.sendall((json.dumps({"challenge": challenge}) + "\n").encode("utf-8"))
+    resp = b""
+    while not resp.endswith(b"\n"):
+        chunk = s.recv(4096)
+        if not chunk:
+            break
+        resp += chunk
+    s.close()
+    return json.loads(resp.decode("utf-8"))
+
+
+def main():
+    msg = read_msg()
+    if not msg:
+        return
+    challenge = str(msg.get("challenge", ""))
+    if not challenge:
+        write_msg({"error": "empty challenge"})
+        return
+    try:
+        write_msg(sign(challenge))
+    except Exception as e:  # daemon onbereikbaar e.d. → nette fout naar de extensie
+        write_msg({"error": "attestd unavailable: %s" % e})
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,20 @@
+[Unit]
+Description=Coolbx OS — device-attestatie signing-daemon (HMAC-SHA256)
+Documentation=https://coolbx.be/
+Requires=coolbx-device-secret.service
+After=coolbx-device-secret.service
+ConditionPathExists=/etc/coolbx/device-secret
+
+[Service]
+# Draait als root (leest het root-only secret) maar tekent enkel — lekt het secret nooit.
+ExecStart=/usr/libexec/coolbx-attestd
+Restart=on-failure
+RestartSec=5
+# Hardening: het proces heeft alleen het secret + de socket nodig.
+ProtectHome=yes
+ProtectSystem=strict
+ReadWritePaths=/run
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

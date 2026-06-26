@@ -1,0 +1,9 @@
+{
+  "name": "be.edugolo.coolbx.attest",
+  "description": "Coolbx OS device-attestatie (HMAC-handshake met de Focus-server)",
+  "path": "/usr/libexec/coolbx-attest-host",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://makdakigkdbicdljgdclgnejachcohag/"
+  ]
+}

@@ -1,0 +1,89 @@
+#!/usr/bin/env python3
+"""Coolbx OS — root signing-daemon voor toestel-attestatie (ADR-0013/0024).
+
+Houdt het per-toestel-secret (root-only /etc/coolbx/device-secret) en tekent challenges met
+HMAC-SHA256, ZONDER het secret ooit te lekken. Lokale clients (de native-messaging-host) sturen
+{"challenge": "<server-nonce>"} over een unix-socket en krijgen {"deviceId", "session", "signature"}.
+
+De **session**-claim (kiosk vs free) wordt bepaald via SO_PEERCRED — de UID van het verbindende
+proces, door de kernel bepaald, NIET door de aanroeper. Draait de aanroep onder de coolbx-kiosk-user
+→ session=kiosk; anders → session=free. De claim wordt MEEGETEKEND in de HMAC
+(sig = HMAC(secret, nonce + "|" + session)) zodat hij onvervalsbaar is. De Focus-server vereist
+session=kiosk voor een proctored toets. Zie docs/ATTESTATION.md.
+"""
+import hashlib
+import hmac
+import json
+import os
+import pwd
+import socket
+import socketserver
+import struct
+
+SECRET_PATH = "/etc/coolbx/device-secret"
+SOCK_PATH = "/run/coolbx-attest.sock"
+KIOSK_USER = "coolbx-kiosk"
+
+
+def device_id():
+    try:
+        mid = open("/etc/machine-id").read().strip()
+    except OSError:
+        mid = ""
+    # Stabiele, niet-omkeerbare toestel-ID (lekt de machine-id niet rechtstreeks).
+    return hashlib.sha256(("coolbx:" + mid).encode()).hexdigest()[:32]
+
+
+def peer_session(conn):
+    """Bepaal de sessie uit de UID van het verbindende proces (SO_PEERCRED, door de kernel
+    bepaald). coolbx-kiosk-user → 'kiosk'; al de rest → 'free'. Onvervalsbaar door de aanroeper."""
+    try:
+        creds = conn.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i"))
+        _pid, uid, _gid = struct.unpack("3i", creds)
+        name = pwd.getpwuid(uid).pw_name
+    except Exception:
+        return "free"
+    return "kiosk" if name == KIOSK_USER else "free"
+
+
+class Handler(socketserver.StreamRequestHandler):
+    def handle(self):
+        try:
+            secret = open(SECRET_PATH, "rb").read().strip()
+        except OSError:
+            self.wfile.write(b'{"error":"no device secret"}\n')
+            return
+        line = self.rfile.readline()
+        try:
+            challenge = str(json.loads(line.decode("utf-8")).get("challenge", ""))
+        except Exception:
+            self.wfile.write(b'{"error":"bad request"}\n')
+            return
+        if not challenge:
+            self.wfile.write(b'{"error":"empty challenge"}\n')
+            return
+        session = peer_session(self.connection)
+        # De session-claim mee-tekenen → de server kan een gefakete claim niet accepteren.
+        msg = (challenge + "|" + session).encode("utf-8")
+        sig = hmac.new(secret, msg, hashlib.sha256).hexdigest()
+        out = json.dumps({"deviceId": device_id(), "session": session, "signature": sig})
+        self.wfile.write((out + "\n").encode("utf-8"))
+
+
+class Server(socketserver.ThreadingUnixStreamServer):
+    daemon_threads = True
+    allow_reuse_address = True
+
+
+def main():
+    if os.path.exists(SOCK_PATH):
+        os.unlink(SOCK_PATH)
+    srv = Server(SOCK_PATH, Handler)
+    # De socket mag door de kiosk-user bereikbaar zijn (tekenen = toegestane operatie);
+    # het secret blijft in dit root-proces. Geen secret-exfiltratie mogelijk.
+    os.chmod(SOCK_PATH, 0o666)
+    srv.serve_forever()
+
+
+if __name__ == "__main__":
+    main()
