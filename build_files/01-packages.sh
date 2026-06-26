@@ -46,17 +46,21 @@ packages=(
 
 dnf5 -y install --setopt=install_weak_deps=False --allowerasing "${packages[@]}"
 
-# Hardware-firmware voor brede vlootdekking op WILLEKEURIGE schoollaptops.
-# Sinds Fedora 42/43 is firmware opgesplitst en komt 'm grotendeels via comps-groep
-# `@hardware-support` binnen (atheros/realtek/mt7xxx/brcmfmac + amd/intel/nvidia-gpu + sof/cirrus/
-# intel-audio). Met install_weak_deps=False mist een kale fedora-bootc die firmware -> geen wifi.
-dnf5 -y group install hardware-support
-
-# iwlwifi (Intel-wifi) EXPLICIET: zit NIET in de hardware-support-comps van de fedora-bootc:43
-# build-snapshot (bewezen: groep installeerde wél atheros/realtek/mt7xxx maar GEEN iwlwifi -> Intel
-# AX200 bleef zonder iwlwifi-cc-a0-77.ucode). Het pakket levert exact die ucode. dvm=oud, mvm=AX2xx
-# (trekt mld=BE2xx mee). Niet op de groep vertrouwen voor Intel-wifi.
-dnf5 -y install iwlwifi-dvm-firmware iwlwifi-mvm-firmware
+# Hardware-firmware voor brede vlootdekking op WILLEKEURIGE schoollaptops — EXPLICIETE lijst.
+# Sinds Fedora 42/43 is firmware opgesplitst in subpakketten die met install_weak_deps=False NIET
+# meekomen -> kale fedora-bootc heeft geen wifi (bewezen: Intel AX200 vond geen iwlwifi-cc-a0-77.ucode).
+# We SPIEGELEN exact wat de Fedora Silverblue/Kinoite-base doet: die listet deze subpakketten één voor
+# één (gegenereerd uit de @hardware-support-comps door comps-sync.py, zie pagure workstation-ostree-
+# config `packages/common.yaml`) i.p.v. een groepsverwijzing — want de comps-groep bleek snapshot-
+# afhankelijk (installeerde hier wél atheros/realtek/mt7xxx maar GEEN iwlwifi). Expliciet = determi-
+# nistisch. Bluefin/Bazzite installeren dit niet zelf; zij erven het van deze Silverblue-base, wij
+# bouwen één laag lager (kale fedora-bootc) en nemen de lijst dus zelf over.
+dnf5 -y install \
+  iwlwifi-dvm-firmware iwlwifi-mvm-firmware iwlegacy-firmware \
+  atheros-firmware brcmfmac-firmware mt7xxx-firmware realtek-firmware \
+  nxpwireless-firmware tiwilink-firmware qcom-wwan-firmware \
+  amd-gpu-firmware intel-gpu-firmware nvidia-gpu-firmware \
+  amd-ucode-firmware intel-audio-firmware cirrus-audio-firmware
 
 # Firefox eruit (we leveren Chromium)
 dnf5 -y remove firefox firefox-langpacks 2>/dev/null || true
