@@ -72,43 +72,19 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # ostree-rechunk → herverdeelt de content in ~max-layers gelijkmatige, pakket-gegroepeerde
-      # chunks → veel kleinere `bootc upgrade`-deltas over schoolnet (de niet-gerechunkte build
-      # propt ~de helft in één ~1 GB-laag → elke wijziging = volledige her-pull). ref = de lokaal
-      # gebouwde tag in containers-storage; prev-ref = de vorige :stable op GHCR (voor versionering +
-      # om layer-shifts te vermijden; ontbreekt 'ie → overgeslagen, geen prev-ref-fail gezet).
-      - name: Rechunk
-        id: rechunk
-        if: github.event_name != 'pull_request'
-        uses: hhd-dev/rechunk@5fbe1d3a639615d2548d83bc888360de6267b1a2 # v1.2.4
-        with:
-          ref: ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}:stable
-          prev-ref: ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}:stable
-          version: stable
-          labels: ${{ steps.meta.outputs.labels }}
-
-      # Push de GERECHUNKTE OCI-output (steps.rechunk.outputs.ref = oci:<dir>) naar alle tags.
-      # podman laadt de oci:-transport correct (skopeo struikelde over de oci:<dir>-ref-parsing);
-      # --digestfile levert de push-digest voor cosign. podman-login zette de auth al klaar.
-      - name: Push rechunked image
+      # NB: ostree-rechunk is TIJDELIJK UITGESCHAKELD. Bewezen op echte hardware: de rechunk-output
+      # met prev-ref liet NIEUW-geïnstalleerde content vallen (iwlwifi-firmware zat in de buildah-image
+      # maar niet in de gepushte rechunk-image; bootc-delta was 54 MB terwijl >100 MB firmware nieuw was).
+      # Correctheid > delta-optimalisatie: we pushen de volledige buildah-image direct. Rechunk komt terug
+      # als apart onderzoek (waarschijnlijk prev-ref droppen, of zonder content-verlies verifiëren).
+      - name: Push by digest
         id: push
         if: github.event_name != 'pull_request'
-        env:
-          RECHUNK_REF: ${{ steps.rechunk.outputs.ref }}
-          TAGS: ${{ steps.meta.outputs.tags }}
-        run: |
-          set -euo pipefail
-          image_id="$(podman pull "$RECHUNK_REF")"
-          echo "Geladen rechunked image: ${image_id}"
-          digest=""
-          for tag in $TAGS; do
-            echo "→ push ${tag}"
-            podman tag "$image_id" "$tag"
-            podman push --digestfile /tmp/digest "$tag"
-            digest="$(cat /tmp/digest)"
-          done
-          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
-          echo "Pushed rechunked image @ ${digest}"
+        uses: redhat-actions/push-to-registry@5ed88d269cf581ea9ef6dd6806d01562096bee9c # v2
+        with:
+          image: ${{ env.IMAGE_NAME }}
+          tags: ${{ steps.meta.outputs.tags }}
+          registry: ${{ env.IMAGE_REGISTRY }}
 
       # cosign SIGN-BY-DIGEST (not by-tag). Activates automatically once the SIGNING_SECRET
       # repo secret (wachtwoordloze cosign private key) exists; until then the image is pushed
