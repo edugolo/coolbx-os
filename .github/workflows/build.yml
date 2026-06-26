@@ -64,18 +64,11 @@ jobs:
           # bootc container lint runs as the final Containerfile layer.
           oci: true
 
-      # ostree-rechunk → package-grouped layers → much smaller `bootc upgrade` deltas over school nets.
-      # (Runs only on push/cron, before signing; PRs skip it.)
-      - name: Rechunk
-        id: rechunk
-        if: github.event_name != 'pull_request'
-        uses: hhd-dev/rechunk@5fbe1d3a639615d2548d83bc888360de6267b1a2 # v1.2.4
-        with:
-          rechunk: quay.io/centos-bootc/centos-bootc:stream10
-          ref: ${{ steps.build.outputs.image }}:stable
-          prev-ref: ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}:stable
-          version: stable
-
+      # NOTE: ostree-rechunk (package-grouped layers → kleinere `bootc upgrade`-deltas) is bewust
+      # nog NIET bedraad. Het vergt: ref = lokaal-gekwalificeerde tag, de rechunker-tool-image
+      # (ghcr.io/hhd-dev/rechunk, niet een base-image), én het pushen van de rechunk-OCI-output
+      # (skopeo copy) i.p.v. de originele image. Volgt als aparte, geteste stap zodra :stable
+      # als diff-baseline bestaat. Zie docs/SIGNING.md / ROADMAP Fase 5.
       - name: Login to GHCR
         if: github.event_name != 'pull_request'
         uses: redhat-actions/podman-login@4934294ad0449894bcd1e9f191899d7292469603 # v1
