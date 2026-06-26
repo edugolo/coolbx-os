@@ -56,5 +56,10 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     ENABLE_FIRSTBOOT_USER=${ENABLE_FIRSTBOOT_USER} \
     /ctx/build_files/install-features.sh "${FEATURES}"
 
-# 6) Lint
+# 6) Versie-stempel (OS-kern-anker, feature-onafhankelijk). De CI verifieert ná de rechunk-stap dat
+# de gepushte image ECHT deze build draagt — niet per ongeluk een oude image die rechunk oppakte.
+# Bewust een bestand (content), niet enkel een label: rechunk kan labels overschrijven, content niet.
+RUN echo "${SHA_HEAD_SHORT}" > /usr/lib/coolbx-build-id
+
+# 7) Lint
 RUN bootc container lint

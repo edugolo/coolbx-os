@@ -62,6 +62,7 @@ jobs:
             --build-arg "FEATURES=${FEATURES}" \
             --build-arg "ENABLE_FIRSTBOOT_USER=0" \
             --build-arg "FEATURES_CACHEBUST=${{ github.sha }}" \
+            --build-arg "SHA_HEAD_SHORT=${{ github.sha }}" \
             --format oci \
             -f ./Containerfile .
 
@@ -85,27 +86,30 @@ jobs:
           version: stable
           labels: ${{ steps.meta.outputs.labels }}
 
-      # CONTENT-SENTINEL-GATE + push. Mount de rechunk-output (root) en eis dat KRITIEKE bestanden
-      # er zijn én de juiste versie hebben — vangt de storage-mismatch (oude image gerechunkt) die de
-      # rpm-pakketset-check NIET zag (custom /usr/share-files zijn niet rpm-getrackt). Push pas erna.
+      # CONTROLE-STAP + push. Mount de rechunk-output (root) en eis dat het OS-kern-anker (het
+      # versie-stempel /usr/lib/coolbx-build-id) GELIJK is aan deze build-SHA — bewijst dat de verse
+      # build gerechunkt is, niet per ongeluk een oude image (de storage-mismatch-bug). Feature-
+      # ONAFHANKELIJK: geen toetsmodus-bestanden meer (die bestaan niet in een kale OS zonder kiosk).
+      # Daarnaast een firmware-sanity (ook OS-kern). Push pas na een geslaagde controle.
       - name: Verify content + push
         id: push
         if: github.event_name != 'pull_request'
         env:
           REF: ${{ steps.rechunk.outputs.ref }}
           TAGS: ${{ steps.meta.outputs.tags }}
+          EXPECT_BUILD_ID: ${{ github.sha }}
         run: |
           set -euo pipefail
           img="$(sudo podman pull -q "$REF")"
           cref="$(sudo podman create "$img" true)"
           mnt="$(sudo podman mount "$cref")"
           fail=0
-          sudo test -e "$mnt/usr/share/coolbx/kiosk/apply-scale.sh"        || { echo "::error::sentinel: apply-scale.sh ontbreekt"; fail=1; }
-          sudo test -e "$mnt/usr/lib/firmware/iwlwifi-cc-a0-77.ucode.xz"   || { echo "::error::sentinel: iwlwifi-firmware ontbreekt"; fail=1; }
-          sudo grep -q PKEXEC_UID "$mnt/usr/bin/coolbx-kiosk-start"        || { echo "::error::sentinel: coolbx-kiosk-start is een OUDE versie"; fail=1; }
+          got="$(sudo cat "$mnt/usr/lib/coolbx-build-id" 2>/dev/null || true)"
+          [ "$got" = "$EXPECT_BUILD_ID" ] || { echo "::error::versie-stempel mismatch: '$got' != '$EXPECT_BUILD_ID' (oude image gerechunkt?)"; fail=1; }
+          sudo test -e "$mnt/usr/lib/firmware/iwlwifi-cc-a0-77.ucode.xz" || { echo "::error::iwlwifi-firmware ontbreekt"; fail=1; }
           sudo podman umount "$cref" >/dev/null; sudo podman rm "$cref" >/dev/null
-          [ "$fail" = 0 ] || { echo "::error::Rechunk-output mist verse content — niets gepusht."; exit 1; }
-          echo "Content-sentinel OK: verse build correct gerechunkt."
+          [ "$fail" = 0 ] || { echo "::error::Rechunk-output is niet de verse build — niets gepusht."; exit 1; }
+          echo "Controle OK: verse build (${EXPECT_BUILD_ID}) correct gerechunkt."
           digest=""
           for tag in $TAGS; do
             sudo podman tag "$img" "$tag"
