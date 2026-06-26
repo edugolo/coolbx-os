@@ -65,12 +65,12 @@ jobs:
             --format oci \
             -f ./Containerfile .
 
-      # Login in ZOWEL root (skopeo/podman-push) als rootless (cosign leest de user-auth bij signing).
+      # Login als ROOT (de push draait via sudo podman). NB: rootless `podman login` hier mixen met de
+      # sudo-podman-operaties breekt de rootless runtime (/run/user/$UID/containers niet schrijfbaar).
+      # Cosign-signing (nu inactief) heeft later eigen auth nodig → aanpakken bij signing-activatie.
       - name: Login to GHCR
         if: github.event_name != 'pull_request'
-        run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login ghcr.io -u "${{ github.actor }}" --password-stdin
-          echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login ghcr.io -u "${{ github.actor }}" --password-stdin
 
       # ostree-rechunk → pakket-gegroepeerde chunks → kleinere bootc-upgrade-deltas. ref = de LOKALE
       # localhost-build (root-storage). prev-ref = de remote :stable, enkel voor versie/laag-continuïteit
