@@ -1,0 +1,10 @@
+# Host-side OCR-tooling voor de e2e-harness (ADR-0020, laag D).
+# Draait tesseract in een container omdat passwordless sudo enkel `podman` toestaat
+# (geen host-`dnf install`). Bouw: `just ocr-build` → localhost/coolbx-ocr.
+FROM registry.fedoraproject.org/fedora:43
+# ImageMagick voor preprocessing (upscale/normalize/negate) zodat tesseract ook kleine
+# en donker-op-gekleurde tekst (bv. mint-knoppen) betrouwbaar leest.
+RUN dnf install -y --setopt=install_weak_deps=False \
+        tesseract tesseract-langpack-eng tesseract-langpack-nld ImageMagick \
+    && dnf clean all
+ENTRYPOINT []
