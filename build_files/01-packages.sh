@@ -58,9 +58,13 @@ dnf5 -y install --setopt=install_weak_deps=False --allowerasing "${packages[@]}"
 dnf5 -y install \
   iwlwifi-dvm-firmware iwlwifi-mvm-firmware iwlegacy-firmware \
   atheros-firmware brcmfmac-firmware mt7xxx-firmware realtek-firmware \
-  nxpwireless-firmware tiwilink-firmware qcom-wwan-firmware \
+  nxpwireless-firmware tiwilink-firmware qcom-wwan-firmware qcom-accel-firmware \
+  atmel-firmware libertas-firmware zd1211-firmware \
   amd-gpu-firmware intel-gpu-firmware nvidia-gpu-firmware \
-  amd-ucode-firmware intel-audio-firmware cirrus-audio-firmware
+  amd-ucode-firmware \
+  alsa-firmware intel-audio-firmware cirrus-audio-firmware intel-vsc-firmware
+# Bewust NIET: liquidio/netronome/qed/mlxsw_spectrum/mrvlprestera (datacenter-switch/server-NICs)
+# en dvb/iscan (TV-tuner/scanner) — komen nooit in een laptop voor.
 
 # Firefox eruit (we leveren Chromium)
 dnf5 -y remove firefox firefox-langpacks 2>/dev/null || true
