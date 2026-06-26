@@ -67,7 +67,7 @@ jobs:
       - name: Rechunk
         id: rechunk
         if: github.event_name != 'pull_request'
-        uses: hhd-dev/rechunk@8d57c9c4c19e9c0e8bef00c1735b6555ba27d33d # v1.2.3
+        uses: hhd-dev/rechunk@5fbe1d3a639615d2548d83bc888360de6267b1a2 # v1.2.4
         with:
           rechunk: quay.io/centos-bootc/centos-bootc:stream10
           ref: ${{ steps.build.outputs.image }}:stable
