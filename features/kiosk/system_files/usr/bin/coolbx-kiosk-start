@@ -31,6 +31,21 @@ if [ -n "${COOLBX_KIOSK_LOAD_EXT:-}" ]; then
   DEBUG_ENV+=(--property=Environment="COOLBX_KIOSK_LOAD_EXT=${COOLBX_KIOSK_LOAD_EXT}")
 fi
 
+# Volg GNOME's schaalkeuze: de kiosk wordt via pkexec gestart vanuit de GNOME-sessie (pkexec zet
+# PKEXEC_UID). Lees de door mutter gekozen <scale> uit de monitors.xml van die gebruiker en geef 'm
+# door aan sway (zie sway.conf). wlroots kiest anders agressief integer-2.0 i.p.v. GNOME's fractional
+# → kiosk groter dan de desktop. Niet gevonden → leeg → wlroots-auto (geen override).
+SCALE_ENV=()
+GNOME_UID="${PKEXEC_UID:-}"
+if [ -n "$GNOME_UID" ]; then
+  GNOME_HOME="$(getent passwd "$GNOME_UID" | cut -d: -f6)"
+  MON_XML="${GNOME_HOME%/}/.config/monitors.xml"
+  if [ -r "$MON_XML" ]; then
+    KIOSK_SCALE="$(grep -oE '<scale>[0-9.]+</scale>' "$MON_XML" | head -1 | grep -oE '[0-9.]+' || true)"
+    [ -n "${KIOSK_SCALE:-}" ] && SCALE_ENV+=(--property=Environment="COOLBX_KIOSK_SCALE=${KIOSK_SCALE}")
+  fi
+fi
+
 # HOME/XDG_RUNTIME_DIR worden door pam_systemd gezet (niet via Environment= forceren).
 systemd-run --unit=coolbx-kiosk --collect \
   --property=User="$KIOSK_USER" \
@@ -47,6 +62,7 @@ systemd-run --unit=coolbx-kiosk --collect \
   --property=Environment="LANG=nl_BE.UTF-8" \
   --property=Environment="COOLBX_KIOSK_URL=${URL}" \
   "${DEBUG_ENV[@]}" \
+  "${SCALE_ENV[@]}" \
   --property="ExecStopPost=+/usr/bin/coolbx-kiosk-return ${RETURN_VT}" \
   /usr/bin/sway -c /usr/share/coolbx/kiosk/sway.conf
 
