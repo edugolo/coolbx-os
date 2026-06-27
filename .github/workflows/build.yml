@@ -48,6 +48,17 @@ jobs:
             type=raw,value=stable.{{date 'YYYYMMDD'}},enable=${{ github.event_name != 'pull_request' }}
             type=ref,event=pr
 
+      # Pre-pull de basis-image in ROOT-storage met herhaling. quay.io's CDN levert af en toe een
+      # blob met "unexpected EOF" → buildah's FROM-pull faalt dan hard. Met retries vangen we die
+      # transiente hikjes op; buildah gebruikt daarna de gecachte base. (Houd in sync met Containerfile
+      # ARG BASE_IMAGE.)
+      - name: Pre-pull base image (retry transient CDN failures)
+        run: |
+          for i in 1 2 3 4 5; do
+            sudo podman pull quay.io/fedora/fedora-bootc:43 && break
+            echo "base-pull poging $i mislukt — opnieuw over 15s"; sleep 15
+          done
+
       # Bouw in ROOT-storage met een localhost-tag. CRUCIAAL voor rechunk: die mount de image via
       # `sudo podman create` (root-storage). Een ROOTLESS build (redhat-actions/buildah-build) is daar
       # ONZICHTBAAR → rechunk pullt dan stil de OUDE remote :stable (podman pull-policy 'missing') en
