@@ -28,6 +28,10 @@ packages=(
   # Audio (incl. sof-firmware: DSP-firmware = vaak dé showstopper op moderne Intel/AMD-laptops)
   pipewire wireplumber pipewire-pulseaudio
   alsa-sof-firmware
+  # Camera — generieke moderne Linux-camerastack (libcamera + pipewire-camera). NIET Surface-specifiek:
+  # de IPU3/MIPI-kernelbits zitten in mainline en laden vanzelf op toestellen die ze hebben; libcamera
+  # is de userspace-laag die ruwe camera-nodes bruikbaar maakt en helpt ÉLKE camera (ook USB-webcams).
+  libcamera libcamera-ipa libcamera-tools libcamera-v4l2 libcamera-gstreamer pipewire-plugin-libcamera
   # Netwerk
   NetworkManager NetworkManager-wifi
   # Boot splash
@@ -65,6 +69,14 @@ dnf5 -y install \
   alsa-firmware intel-audio-firmware cirrus-audio-firmware intel-vsc-firmware
 # Bewust NIET: liquidio/netronome/qed/mlxsw_spectrum/mrvlprestera (datacenter-switch/server-NICs)
 # en dvb/iscan (TV-tuner/scanner) — komen nooit in een laptop voor.
+
+# Chromium: camera via PipeWire/portal zien. Standaard UIT in Chromium (geen testdekking), maar
+# vereist om libcamera-camera's (Surface IPU3) én — vooruitlopend — andere camera's via de portal te
+# gebruiken. Fedora-chromium sourcet /etc/chromium/chromium.conf; idempotent appenden.
+CONF=/etc/chromium/chromium.conf
+if [ -f "$CONF" ] && ! grep -q 'WebRtcPipeWireCamera' "$CONF"; then
+  printf '\n# Coolbx OS: camera via PipeWire/portal (libcamera)\nCHROMIUM_FLAGS="${CHROMIUM_FLAGS} --enable-features=WebRtcPipeWireCamera"\n' >> "$CONF"
+fi
 
 # Firefox eruit (we leveren Chromium)
 dnf5 -y remove firefox firefox-langpacks 2>/dev/null || true
