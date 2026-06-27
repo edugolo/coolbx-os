@@ -1,9 +1,0 @@
-# Coolbx OS — hardware-feature: Surface Type Cover touchpad-stabiliteit.
-#
-# Het Type Cover-touchpad valt na inactiviteit weg omdat de USB-HOST-CONTROLLER in runtime-spaarstand
-# gaat (het apparaat zelf blijft wakker, maar de controller eronder niet). Geverifieerd op Surface
-# Go 2: controller op spaarstand 'uit' zetten loste het haperen op.
-#
-# GERICHT: vuurt alleen wanneer de Surface Type Cover (Microsoft 045e:09b5) verschijnt → laptops
-# zonder zo'n cover ondervinden geen batterijkost. Per Surface-model uit te breiden met meer PID's.
-ACTION=="add", SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="045e", ATTR{idProduct}=="09b5", RUN+="/usr/libexec/coolbx-typecover-power"

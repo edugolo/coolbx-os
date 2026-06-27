@@ -1,0 +1,13 @@
+# Coolbx OS — hardware-feature: Surface Type Cover touchpad-init.
+#
+# Op de Surface Go 2/Go 3 wordt de Type Cover te vroeg in de USB-init bevraagd; de touchpad-
+# interface valt dan terug in een muis-emulatie-modus en wordt door hid-generic gepakt i.p.v.
+# hid-multitouch → touchpad effectief dood tot een her-aanmelding. USB_QUIRK_DELAY_INIT (vlag 'g')
+# last een pauze in zodat de multitouch-mode-switch slaagt.
+#
+# Dit is EXACT wat het linux-surface-project doet (patches/.../0010-surface-typecover.patch is voor
+# 045e:09b5 puur deze quirks.c-regel) — maar via een gewone kernelarg op de STOCK kernel, dus géén
+# eigen kernel / out-of-tree module (binnen ADR-0019). Gericht op 045e:09b5 → nul effect op andere
+# laptops. Restrisico: zelfs mét deze quirk blijft de Type Cover-init zelden marginaal (bekend bij
+# linux-surface; los/vast-maken herstelt) — dit is de best-mogelijke fix zonder custom kernel.
+kargs = ["usbcore.quirks=045e:09b5:g"]
