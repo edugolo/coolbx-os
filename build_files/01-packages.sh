@@ -78,9 +78,6 @@ if [ -f "$CONF" ] && ! grep -q 'WebRtcPipeWireCamera' "$CONF"; then
   printf '\n# Coolbx OS: camera via PipeWire/portal (libcamera)\nCHROMIUM_FLAGS="${CHROMIUM_FLAGS} --enable-features=WebRtcPipeWireCamera"\n' >> "$CONF"
 fi
 
-# Firefox eruit (we leveren Chromium)
-dnf5 -y remove firefox firefox-langpacks 2>/dev/null || true
-
 dnf5 clean all
 
 # /var schoon houden (bootc-lint geeft anders waarschuwingen over dnf-logs/countme).
