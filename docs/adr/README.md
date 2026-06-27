@@ -34,3 +34,4 @@ oude op status "Vervangen door ADR-XXXX").
 | [0024](0024-attest-hmac-implementatie.md) | Toestel-attestatie HMAC-scaffold — implementatie (ADR-0013) | Aanvaard (geverifieerd) |
 | [0025](0025-nvidia-nouveau-geen-proprietaire-driver.md) | nvidia: nouveau + firmware, géén proprietaire driver (ADR-0019) | Aanvaard (richting) |
 | [0026](0026-surface-camera-niet-ondersteund.md) | Surface-camera (IPU3) niet ondersteund — vereist linux-surface-kernel (ADR-0019) | Aanvaard (richting) |
+| [0027](0027-media-nonfree-optionele-feature.md) | Nonfree media (codecs + VAAPI + Widevine) als optionele feature | Aanvaard (richting) |
