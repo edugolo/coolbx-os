@@ -19,6 +19,7 @@ import pwd
 import socket
 import socketserver
 import struct
+import subprocess
 
 SECRET_PATH = "/etc/coolbx/device-secret"
 SOCK_PATH = "/run/coolbx-attest.sock"
@@ -46,23 +47,61 @@ def peer_session(conn):
     return "kiosk" if name == KIOSK_USER else "free"
 
 
+EXAM_POLICY_BIN = "/usr/libexec/coolbx-exam-policy"
+
+
+def apply_exam_policy(payload, session):
+    """Per-examen kiosk-policy (B3.c, F-03-007). ALLEEN de kiosk-sessie mag dit
+    vragen (SO_PEERCRED, kernel-bepaald) — de vrije modus of een ssh-gebruiker
+    kan de browser-policy dus niet zetten. phase 'exam' schrijft baseline ∪
+    server-domeinen; 'lobby' herstelt de default-deny lobby-baseline. De
+    policy-writer valideert de domeinen en herstart de kiosk-Chromium."""
+    if session != "kiosk":
+        return {"error": "exam policy alleen vanuit de kiosk-sessie"}
+    phase = payload.get("phase")
+    if phase not in ("exam", "lobby"):
+        return {"error": "ongeldige phase"}
+    cmd = [EXAM_POLICY_BIN, "apply" if phase == "exam" else "lobby", "--restart"]
+    try:
+        proc = subprocess.run(
+            cmd,
+            input=json.dumps({"allowDomains": payload.get("allowDomains", [])}),
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except Exception as e:
+        return {"error": "policy-writer faalde: %s" % e}
+    if proc.returncode != 0:
+        return {"error": "policy-writer weigerde: %s" % proc.stderr.strip()[:200]}
+    return {"ok": True, "phase": phase}
+
+
 class Handler(socketserver.StreamRequestHandler):
     def handle(self):
+        line = self.rfile.readline()
+        try:
+            req = json.loads(line.decode("utf-8"))
+        except Exception:
+            self.wfile.write(b'{"error":"bad request"}\n')
+            return
+        session = peer_session(self.connection)
+
+        # Per-examen kiosk-policy (B3.c) — geen secret nodig; wel kiosk-peer.
+        if isinstance(req.get("examPolicy"), dict):
+            out = json.dumps(apply_exam_policy(req["examPolicy"], session))
+            self.wfile.write((out + "\n").encode("utf-8"))
+            return
+
         try:
             secret = open(SECRET_PATH, "rb").read().strip()
         except OSError:
             self.wfile.write(b'{"error":"no device secret"}\n')
             return
-        line = self.rfile.readline()
-        try:
-            challenge = str(json.loads(line.decode("utf-8")).get("challenge", ""))
-        except Exception:
-            self.wfile.write(b'{"error":"bad request"}\n')
-            return
+        challenge = str(req.get("challenge", ""))
         if not challenge:
             self.wfile.write(b'{"error":"empty challenge"}\n')
             return
-        session = peer_session(self.connection)
         # De session-claim mee-tekenen → de server kan een gefakete claim niet accepteren.
         msg = (challenge + "|" + session).encode("utf-8")
         sig = hmac.new(secret, msg, hashlib.sha256).hexdigest()

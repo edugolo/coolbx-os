@@ -1,0 +1,130 @@
+#!/usr/bin/env python3
+"""Coolbx OS — per-examen Chromium-policy-writer (B3.c, Focus-audit F-03-007).
+
+Schrijft/verwijdert /etc/chromium/policies/managed/coolbx-exam.json — de default-deny
+URLBlocklist/URLAllowlist + examen-hardening voor de kiosk. Root-only; wordt aangeroepen door:
+  - coolbx-kiosk-start  → `lobby`  (default-deny baseline: alleen Focus-infra + extensie)
+  - coolbx-attestd      → `apply`  (examen gestart: baseline ∪ server-gestuurde les-domeinen,
+                                    JSON {"allowDomains": [...]} op stdin; kiosk-peer afgedwongen
+                                    door de daemon via SO_PEERCRED)
+  - coolbx-kiosk-return → `clear`  (kiosk-einde: policy weg — vrije modus onbeperkt)
+  - boot-cleanup-unit   → `clear`  (crash-artefact: policy mag een reboot nooit overleven)
+
+LET OP: de Chromium-policy-dir is GLOBAAL (raakt óók de vrije GNOME-modus). Daarom bestaat het
+bestand alléén zolang de kiosk-sessie draait; tijdens een toets is de VT toch vergrendeld (S3).
+Met `--restart` wordt de kiosk-Chromium daarna gekilld — de herstartloop in chromium-kiosk.sh
+brengt hem terug mét de nieuwe policy (= de "gecontroleerde herstart" uit de D3-flow).
+"""
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+
+POLICY_PATH = "/etc/chromium/policies/managed/coolbx-exam.json"
+INFRA_PATH = "/etc/coolbx/focus-infra.domains"
+EXTENSION_ID = "makdakigkdbicdljgdclgnejachcohag"
+MAX_DOMAINS = 100
+# Hostname: labels van letters/cijfers/koppelteken, minstens twee labels.
+DOMAIN_RE = re.compile(r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$")
+
+# Examen-hardeningset (F-03-007): geen downloads, niet printen, geen
+# async-clipboard. Incognito/guest/devtools/file:// zitten al in de globale
+# enforcement-/prod-hardening-policies van het image.
+HARDENING = {
+    "DownloadRestrictions": 3,
+    "PrintingEnabled": False,
+    "DefaultClipboardSetting": 2,
+}
+
+
+def infra_domains():
+    try:
+        with open(INFRA_PATH) as f:
+            return [ln.strip().lower() for ln in f if ln.strip() and not ln.startswith("#")]
+    except OSError:
+        return []
+
+
+def sanitize(domains):
+    """Alleen kale hostnames (subdomein-inclusieve Chrome-match); rest wordt geweigerd."""
+    ok, rejected = [], []
+    for d in domains[:MAX_DOMAINS]:
+        d = str(d).strip().lower()
+        if d.startswith("*."):
+            d = d[2:]
+        if DOMAIN_RE.match(d):
+            ok.append(d)
+        elif d:
+            rejected.append(d)
+    return sorted(set(ok)), rejected
+
+
+def write_policy(extra_domains):
+    allow = [f"chrome-extension://{EXTENSION_ID}"]
+    allow += infra_domains()
+    allow += extra_domains
+    policy = dict(HARDENING)
+    policy["URLBlocklist"] = ["*"]
+    policy["URLAllowlist"] = allow
+    os.makedirs(os.path.dirname(POLICY_PATH), exist_ok=True)
+    # Atomair schrijven: Chromium mag nooit een half policy-bestand lezen.
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(POLICY_PATH), prefix=".coolbx-exam-")
+    with os.fdopen(fd, "w") as f:
+        json.dump(policy, f, indent=2)
+    os.chmod(tmp, 0o644)
+    os.replace(tmp, POLICY_PATH)
+
+
+def clear_policy():
+    try:
+        os.unlink(POLICY_PATH)
+    except FileNotFoundError:
+        pass
+
+
+def restart_kiosk_chromium():
+    """Kill de kiosk-Chromium; de herstartloop (chromium-kiosk.sh) brengt hem terug met de
+    nieuwe policy. No-op wanneer de kiosk-sessie niet draait."""
+    active = subprocess.run(
+        ["systemctl", "is-active", "--quiet", "coolbx-kiosk"], check=False
+    ).returncode == 0
+    if not active:
+        return
+    subprocess.run(["pkill", "-u", "coolbx-kiosk", "-f", "--user-data-dir="], check=False)
+
+
+def main():
+    args = sys.argv[1:]
+    if not args or args[0] not in ("lobby", "apply", "clear"):
+        print("gebruik: coolbx-exam-policy lobby|apply|clear [--restart]", file=sys.stderr)
+        return 2
+    cmd = args[0]
+    do_restart = "--restart" in args[1:]
+
+    if cmd == "clear":
+        clear_policy()
+    elif cmd == "lobby":
+        write_policy([])
+    else:  # apply
+        try:
+            payload = json.load(sys.stdin)
+            domains = payload.get("allowDomains", [])
+            if not isinstance(domains, list):
+                raise ValueError("allowDomains moet een lijst zijn")
+        except Exception as e:
+            print(f"ongeldige apply-payload: {e}", file=sys.stderr)
+            return 2
+        cleaned, rejected = sanitize(domains)
+        if rejected:
+            print(f"geweigerde domein-entries: {rejected}", file=sys.stderr)
+        write_policy(cleaned)
+
+    if do_restart:
+        restart_kiosk_chromium()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

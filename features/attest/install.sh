@@ -6,10 +6,13 @@ set -ouex pipefail
 
 chmod 0755 /usr/libexec/coolbx-gen-device-secret \
            /usr/libexec/coolbx-attestd \
-           /usr/libexec/coolbx-attest-host
+           /usr/libexec/coolbx-attest-host \
+           /usr/libexec/coolbx-exam-policy
 
 # Het secret wordt bij first-boot gegenereerd; de daemon start daarna.
 systemctl enable coolbx-device-secret.service
 systemctl enable coolbx-attestd.service
+# Crash-vangnet: achtergebleven examen-policy bij boot opruimen (B3.c).
+systemctl enable coolbx-exam-policy-cleanup.service
 
 echo "attest feature installed"

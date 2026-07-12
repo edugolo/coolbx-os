@@ -58,3 +58,22 @@ het gezaghebbende, per-sessie, onvervalsbare kiosk-signaal**. De extensie bepaal
 - **Relay-resistentie:** bind de challenge aan tijd/sessie (server doet dit al via de nonce); overweeg
   peer-cred-checks op de socket zodat enkel de Focus-extensie-context tekent.
 - **TPM-sealing + FDE:** seal het secret aan de TPM zodat fysieke schijf-diefstal het niet prijsgeeft (ADR-0013).
+
+## Per-examen kiosk-policy (B3.c, Focus-audit F-03-007)
+
+Zelfde socket (`/run/coolbx-attest.sock`), tweede request-type. De Focus-server stuurt bij examen-start
+`exam:policy {phase, allowDomains}` naar kiosk-geattesteerde extensies; de extensie relayt hem als
+`{"examPolicy": {"phase": "exam"|"lobby", "allowDomains": [...]}}` naar de native host → daemon.
+
+- **Alleen een kiosk-peer** (SO_PEERCRED, kernel-bepaald) mag dit — de vrije modus of ssh kan de
+  browser-policy niet zetten. Response: `{"ok": true, "phase": ...}` of `{"error": ...}`.
+- De daemon roept `/usr/libexec/coolbx-exam-policy` aan: valideert de domeinen (kale hostnames,
+  `*.x` → `x`, max 100), schrijft atomair `/etc/chromium/policies/managed/coolbx-exam.json`
+  (`URLBlocklist:["*"]` + `URLAllowlist` = extensie + Focus-infra (`/etc/coolbx/focus-infra.domains`)
+  + les-domeinen + examen-hardeningset) en herstart de kiosk-Chromium (de herstartloop van
+  `chromium-kiosk.sh` brengt hem terug mét policy).
+- **Lifecycle** (de policy-dir is globaal, dus het bestand leeft alléén met de kiosk):
+  `coolbx-kiosk-start` schrijft de default-deny **lobby-baseline** (alleen infra + extensie);
+  `phase:"exam"` verruimt naar de les-set; `phase:"lobby"` herstelt de baseline;
+  `coolbx-kiosk-return` verwijdert het bestand; `coolbx-exam-policy-cleanup.service` ruimt een
+  crash-artefact bij boot op. Zie `tests/test_13_exam_policy.py`.

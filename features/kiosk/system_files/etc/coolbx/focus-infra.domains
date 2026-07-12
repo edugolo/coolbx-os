@@ -1,0 +1,5 @@
+# Focus-infra: altijd bereikbaar vanuit de kiosk (lobby én examen).
+# Eén hostname per regel (subdomein-inclusieve Chrome-match); deployment-
+# specifiek — beheer via ansible bij multi-school-uitrol.
+focus-dashboard.edugolo.be
+focus-api.edugolo.be

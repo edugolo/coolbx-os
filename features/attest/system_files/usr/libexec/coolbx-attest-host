@@ -33,11 +33,12 @@ def write_msg(obj):
     sys.stdout.buffer.flush()
 
 
-def sign(challenge):
+def forward(payload, timeout=5):
+    """Stuur een request 1-op-1 door naar de root-daemon en geef het antwoord terug."""
     s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    s.settimeout(5)
+    s.settimeout(timeout)
     s.connect(SOCK_PATH)
-    s.sendall((json.dumps({"challenge": challenge}) + "\n").encode("utf-8"))
+    s.sendall((json.dumps(payload) + "\n").encode("utf-8"))
     resp = b""
     while not resp.endswith(b"\n"):
         chunk = s.recv(4096)
@@ -52,12 +53,21 @@ def main():
     msg = read_msg()
     if not msg:
         return
+    # Per-examen kiosk-policy (B3.c): doorgeefluik naar de daemon, die de
+    # kiosk-peer afdwingt (wij draaien als de kiosk-user, kind van Chromium).
+    # Policy schrijven + kiosk-herstart kan even duren → ruimere timeout.
+    if isinstance(msg.get("examPolicy"), dict):
+        try:
+            write_msg(forward({"examPolicy": msg["examPolicy"]}, timeout=25))
+        except Exception as e:
+            write_msg({"error": "attestd unavailable: %s" % e})
+        return
     challenge = str(msg.get("challenge", ""))
     if not challenge:
         write_msg({"error": "empty challenge"})
         return
     try:
-        write_msg(sign(challenge))
+        write_msg(forward({"challenge": challenge}))
     except Exception as e:  # daemon onbereikbaar e.d. → nette fout naar de extensie
         write_msg({"error": "attestd unavailable: %s" % e})
 

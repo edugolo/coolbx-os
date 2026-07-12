@@ -1,0 +1,13 @@
+# Crash-vangnet (B3.c): een examen-/lobby-policy mag een reboot nooit
+# overleven — anders start de vrije GNOME-modus onder de kiosk-lockdown
+# (de Chromium-policy-dir is globaal).
+[Unit]
+Description=Coolbx: verwijder achtergebleven examen-Chromium-policy
+ConditionPathExists=/etc/chromium/policies/managed/coolbx-exam.json
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/coolbx-exam-policy clear
+
+[Install]
+WantedBy=multi-user.target

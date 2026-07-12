@@ -3,4 +3,9 @@
 # (Eerst unlock, anders weigert chvt door de VT_LOCKSWITCH.)
 set -uo pipefail
 /usr/bin/coolbx-vt-lock unlock 2>/dev/null || true
+# Examen-/lobby-policy opruimen (B3.c): de vrije modus mag nooit onder de
+# kiosk-lockdown vallen (de Chromium-policy-dir is globaal).
+if [ -x /usr/libexec/coolbx-exam-policy ]; then
+  /usr/libexec/coolbx-exam-policy clear || true
+fi
 /usr/bin/chvt "${1:-2}"

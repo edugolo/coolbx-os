@@ -21,6 +21,14 @@ mount -t tmpfs -o "mode=0700,uid=${KIOSK_USER},gid=${KIOSK_USER}" tmpfs "$KIOSK_
 chown "$KIOSK_USER":tty "$KIOSK_TTY" 2>/dev/null || true
 chmod 620 "$KIOSK_TTY" 2>/dev/null || true
 
+# Default-deny vanaf de kiosklobby (B3.c, F-03-007): alleen Focus-infra + de
+# extensie tot de server een per-examen allowlist stuurt. Het bestand leeft
+# alleen zolang de kiosk draait (de policy-dir is globaal): kiosk-return en
+# de boot-cleanup ruimen het op.
+if [ -x /usr/libexec/coolbx-exam-policy ]; then
+  /usr/libexec/coolbx-exam-policy lobby || true
+fi
+
 # DEV-ONLY (ADR-0020): forward de CDP-debugvlag door systemd-run heen naar de sway-sessie
 # (systemd-run start met schone env). Prod zet COOLBX_KIOSK_DEBUG nooit → leeg → geen effect.
 DEBUG_ENV=()
