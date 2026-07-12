@@ -25,7 +25,15 @@ chmod 620 "$KIOSK_TTY" 2>/dev/null || true
 # extensie tot de server een per-examen allowlist stuurt. Het bestand leeft
 # alleen zolang de kiosk draait (de policy-dir is globaal): kiosk-return en
 # de boot-cleanup ruimen het op.
-if [ -x /usr/libexec/coolbx-exam-policy ]; then
+#
+# ALLEEN PROD: de default-deny URLBlocklist blokkeert óók de dev-placeholder
+# (`file://…/placeholder.html`) — net als coolbx-hardening-prod.json (die om
+# dezelfde reden dev-gated is). Signaal = de aanwezigheid van dat prod-only
+# bestand (dev-builds verwijderen het in features/kiosk/install.sh). Tijdens
+# een échte examen-start schrijft coolbx-attestd de policy los van dit pad,
+# dus de examen-lockdown werkt ook in dev-e2e (test_13).
+PROD_HARDENING=/etc/chromium/policies/managed/coolbx-hardening-prod.json
+if [ -x /usr/libexec/coolbx-exam-policy ] && [ -f "$PROD_HARDENING" ]; then
   /usr/libexec/coolbx-exam-policy lobby || true
 fi
 

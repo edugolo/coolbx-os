@@ -10,10 +10,13 @@ ConditionPathExists=/etc/coolbx/device-secret
 ExecStart=/usr/libexec/coolbx-attestd
 Restart=on-failure
 RestartSec=5
-# Hardening: het proces heeft alleen het secret + de socket nodig.
+# Hardening: het proces heeft het secret, de socket en — sinds B3.c — de
+# Chromium-policy-dir nodig (de per-examen kiosk-allowlist wordt daar door
+# coolbx-exam-policy geschreven, een child in ditzelfde mount-namespace).
+# Verder blijft het bestandssysteem read-only.
 ProtectHome=yes
 ProtectSystem=strict
-ReadWritePaths=/run
+ReadWritePaths=/run /etc/chromium/policies/managed
 NoNewPrivileges=yes
 
 [Install]
