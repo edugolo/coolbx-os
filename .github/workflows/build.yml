@@ -46,6 +46,7 @@ jobs:
           tags: |
             type=raw,value=stable,enable=${{ github.event_name != 'pull_request' }}
             type=raw,value=stable.{{date 'YYYYMMDD'}},enable=${{ github.event_name != 'pull_request' }}
+            type=sha,enable=${{ github.event_name != 'pull_request' }}
             type=ref,event=pr
 
       # Pre-pull de basis-image in ROOT-storage met herhaling. quay.io's CDN levert af en toe een
@@ -130,10 +131,26 @@ jobs:
           echo "digest=${digest}" >> "$GITHUB_OUTPUT"
           echo "Pushed @ ${digest}"
 
-      # cosign SIGN-BY-DIGEST (not by-tag). Activates automatically once the SIGNING_SECRET
-      # repo secret (wachtwoordloze cosign private key) exists; until then the image is pushed
-      # UNSIGNED (scaffold veilig niet-actief — zie docs/SIGNING.md). cosign.pub is committed in
-      # the repo + baked into the image at /etc/pki/containers/coolbx.pub (on-device verification).
+      # SIGNING (B3.d, Focus-audit F-03-008) — twee lagen, sign-by-digest:
+      #  1. KEYLESS (Fulcio/Rekor, ambient GitHub-OIDC): VERPLICHT op elke push —
+      #     faalt de signing, dan faalt de build. Levert publieke transparantie
+      #     (Rekor-log) + verifieerbaarheid in CI/tooling. Geen sleutelbeheer.
+      #  2. KEYPAIR (SIGNING_SECRET): het TOESTEL-verify-pad — containers-policy.json
+      #     kan GitHub-Actions-keyless-identiteiten (URI-SAN) niet verifiëren
+      #     (fulcio-verificatie ondersteunt alleen subjectEmail), dus on-device
+      #     enforcement draait op de cosign-keypair (register-fallback). Activeert
+      #     zodra het secret bestaat; zie docs/SIGNING.md.
+      - name: Install cosign (keyless)
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3.9.2
+
+      - name: Sign by digest (keyless, verplicht)
+        if: github.event_name != 'pull_request'
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          cosign sign -y "${IMAGE_REGISTRY}/${IMAGE_NAME}@${DIGEST}"
+
       - name: Detect signing key
         id: signing
         if: github.event_name != 'pull_request'
@@ -147,11 +164,7 @@ jobs:
             echo "::warning::SIGNING_SECRET niet ingesteld — image UNSIGNED gepusht (zie docs/SIGNING.md)"
           fi
 
-      - name: Install cosign
-        if: steps.signing.outputs.enabled == 'true'
-        uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3.9.2
-
-      - name: Sign by digest
+      - name: Sign by digest (keypair, toestel-verify-pad)
         if: steps.signing.outputs.enabled == 'true'
         env:
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}

@@ -4,9 +4,18 @@ De "managed Chromebook"-vertrouwensgarantie: schooltoestellen weigeren elke niet
 getamperde OS-image. De CI signt met **cosign (sign-by-digest)**; het toestel verifieert tegen een
 ingebakken publieke sleutel.
 
-> **Status:** de CI-stap + de on-device-templates staan klaar; de policy is **bewust nog niet actief**
-> (een `default: reject` zónder geldige sleutel/handtekening breekt álle updates). Activeer pas na de
-> stappen hieronder.
+> **Status (B3.d, 2026-07-12):** de CI signt elke push nu VERPLICHT **keyless**
+> (Fulcio/Rekor via GitHub-OIDC — faalt de signing, dan faalt de build): publieke
+> transparantie zonder sleutelbeheer, verifieerbaar met
+> `cosign verify --certificate-identity-regexp 'github.com/edugolo/coolbx-os' --certificate-oidc-issuer https://token.actions.githubusercontent.com <image>@<digest>`.
+> **On-device enforcement** (bootc/policy.json) kan keyless-identiteiten van GitHub
+> Actions echter NIET verifiëren (containers-policy fulcio ondersteunt alleen
+> `subjectEmail`, geen URI-SAN's) — het toestel-verify-pad is daarom de
+> **cosign-keypair** (register-fallback F-03-008). Die policy is bewust nog niet
+> actief (een `default: reject` zónder geldige sleutel/handtekening breekt álle
+> updates). Activeer pas na de stappen hieronder — sleutel-custody ligt bij de
+> beheerder ([extern]): private key in het `SIGNING_SECRET`-repo-secret ÉN offline
+> back-up (Vaultwarden — les van F-05-007).
 
 ## Eenmalige opzet
 
