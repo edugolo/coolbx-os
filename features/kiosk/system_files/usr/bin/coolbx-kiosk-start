@@ -62,6 +62,19 @@ if [ -n "$GNOME_UID" ]; then
   fi
 fi
 
+# Software-rendering (F-02-050, OV-4=VM-only): pixman/GPU-loos is nodig in de
+# VM (geen echte GPU), maar op écht toetsklas-hardware moet de GPU gebruikt
+# worden — anders rendert de examen-kiosk traag/haperend in software. Detecteer
+# een VM (systemd-detect-virt) of een dev-debugsessie; alleen dán forceren.
+# COOLBX_KIOSK_SOFTWARE_RENDER=1 dwingt het expliciet af (bv. GPU-loze hardware).
+RENDER_ENV=()
+if [ "${COOLBX_KIOSK_SOFTWARE_RENDER:-0}" = "1" ] \
+   || [ "${COOLBX_KIOSK_DEBUG:-0}" = "1" ] \
+   || systemd-detect-virt --quiet --vm; then
+  RENDER_ENV+=(--property=Environment="WLR_RENDERER=pixman")
+  RENDER_ENV+=(--property=Environment="COOLBX_KIOSK_SW_RENDER=1")
+fi
+
 # HOME/XDG_RUNTIME_DIR worden door pam_systemd gezet (niet via Environment= forceren).
 systemd-run --unit=coolbx-kiosk --collect \
   --property=User="$KIOSK_USER" \
@@ -73,10 +86,10 @@ systemd-run --unit=coolbx-kiosk --collect \
   --property=UtmpIdentifier="tty${VT}" \
   --property=UtmpMode=user \
   --property=SupplementaryGroups="video input render tty" \
-  --property=Environment="WLR_RENDERER=pixman" \
   --property=Environment="XKB_DEFAULT_LAYOUT=be" \
   --property=Environment="LANG=nl_BE.UTF-8" \
   --property=Environment="COOLBX_KIOSK_URL=${URL}" \
+  "${RENDER_ENV[@]}" \
   "${DEBUG_ENV[@]}" \
   "${SCALE_ENV[@]}" \
   --property="ExecStopPost=+/usr/bin/coolbx-kiosk-return ${RETURN_VT}" \

@@ -40,12 +40,18 @@ while [ "$n" -lt 10 ]; do
   # keert meteen terug, en zou deze herstart-loop stapels --app-vensters openen.
   pkill -f -- "--user-data-dir=$PROFILE" 2>/dev/null && sleep 1 || true
 
+  # GPU-loos alleen bij software-rendering (F-02-050): coolbx-kiosk-start zet
+  # COOLBX_KIOSK_SW_RENDER=1 in een VM/dev; op echte hardware gebruikt de
+  # kiosk de GPU (vlottere examen-rendering).
+  GPU_FLAGS=()
+  [ "${COOLBX_KIOSK_SW_RENDER:-0}" = "1" ] && GPU_FLAGS+=(--disable-gpu)
+
   start=$SECONDS
   "$BIN" \
     --ozone-platform=wayland \
     --user-data-dir="$PROFILE" \
     --password-store=basic \
-    --disable-gpu \
+    "${GPU_FLAGS[@]}" \
     --disable-dev-shm-usage \
     --no-first-run --no-default-browser-check \
     --disable-session-crashed-bubble --disable-infobars \

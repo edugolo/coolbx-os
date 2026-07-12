@@ -9,8 +9,12 @@ FEATURES_DIR="/ctx/features"
 for feat in $FEATURES; do
   fdir="${FEATURES_DIR}/${feat}"
   if [[ ! -d "$fdir" ]]; then
-    echo "WARN: feature '${feat}' niet gevonden in ${FEATURES_DIR}" >&2
-    continue
+    # Hard falen (F-02-051): een typo in FEATURES mag geen stil featureloos
+    # image opleveren (een kale build zonder kiosk/attest slaagt anders en de
+    # e2e-suite valt pas veel later om). Beschikbare features tonen.
+    echo "::error::feature '${feat}' niet gevonden in ${FEATURES_DIR}" >&2
+    echo "Beschikbare features: $(cd "${FEATURES_DIR}" && ls -d */ 2>/dev/null | tr -d '/' | tr '\n' ' ')" >&2
+    exit 1
   fi
   echo "== feature: ${feat} =="
   # Self-contained: kopieer eventuele system_files en draai install.sh.
