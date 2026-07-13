@@ -4,9 +4,13 @@ Bewijst tegen de LIVE Focus-dashboard dat Chromium:
   1. de productie student-extensie force-installeert (ExtensionSettings → status OK);
   2. de managed-storage aflevert (serverUrl + kioskMode, isExtension, status OK).
 
-Vereist internet + bereikbare update.xml (de VM heeft NAT-net). Slaat over als de
-dashboard onbereikbaar is (offline CI) — dit is een integratietest, geen unit-test.
+Vereist internet + bereikbare update.xml (de VM heeft NAT-net). Onbereikbaar =
+HARD FALEN (F-06-011): een stil geskipte integratietest las jarenlang als "gedekt"
+terwijl hij nooit draaide. Bewust offline ontwikkelen kan met een expliciete
+escape: COOLBX_E2E_ALLOW_OFFLINE=1.
 """
+import os
+
 import pytest
 
 from harness import wait_for
@@ -18,7 +22,12 @@ SERVER_URL = "https://focus-api.edugolo.be"
 @pytest.fixture(scope="module")
 def _dashboard_reachable(vm):
     if not vm.ssh_ok(f"curl -sf -o /dev/null --max-time 10 {UPDATE_XML}"):
-        pytest.skip("Focus-dashboard onbereikbaar (offline) — integratietest overgeslagen")
+        if os.environ.get("COOLBX_E2E_ALLOW_OFFLINE") == "1":
+            pytest.skip("Focus-dashboard onbereikbaar — expliciet toegestaan (COOLBX_E2E_ALLOW_OFFLINE=1)")
+        pytest.fail(
+            "Focus-dashboard onbereikbaar vanuit de VM — integratietest kan niet draaien. "
+            "Bewust offline? Zet COOLBX_E2E_ALLOW_OFFLINE=1. (F-06-011: niet meer stil skippen)"
+        )
 
 
 def test_extension_settings_force_install_applied(kiosk, _dashboard_reachable):
