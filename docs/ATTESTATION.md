@@ -15,8 +15,13 @@ Focus-extensie ──connectNative("be.edugolo.coolbx.attest")──▶ coolbx-a
    {deviceId, signature} ◀──────────────────────────────────────── ┘  (secret verlaat het root-proces NOOIT)
 ```
 
-- **Per-toestel-secret** `/etc/coolbx/device-secret` — `0600 root`, bij first-boot gegenereerd
-  (`coolbx-device-secret.service`). De leerling-sessie kan het **niet** lezen.
+- **Per-toestel-secret** — bij first-boot gegenereerd (`coolbx-device-secret.service`). Sinds B3.e
+  (F-03-006) **TPM2-sealed** op toestellen met een TPM: op schijf staat alleen
+  `/etc/coolbx/device-secret.cred` (systemd-creds, `0600 root`); de plaintext bestaat enkel in het
+  geheugen van de daemon. Zonder TPM (Tier 2): plain file `/etc/coolbx/device-secret` (`0600 root`).
+  Een bestaand plain secret wordt bij de eerste boot mét TPM **in-place geseald** (zelfde waarde →
+  de server-registratie blijft geldig) en de plaintext vernietigd. De leerling-sessie kan in geen
+  van beide vormen lezen.
 - **Signing-daemon** `coolbx-attestd` (root, `/run/coolbx-attest.sock`) — tekent challenges, lekt het
   secret nooit. De leerling kan wél een server-nonce laten tekenen (legitiem) maar het secret niet extraheren.
 - **Native-messaging-host** `coolbx-attest-host` (kiosk-user) + manifest
@@ -48,16 +53,49 @@ het gezaghebbende, per-sessie, onvervalsbare kiosk-signaal**. De extensie bepaal
 
 ## Enrollment
 
-- **Pilot/dev:** secret lokaal gegenereerd (deze scaffold) — registreer `deviceId`+secret eenmalig in de
-  Focus-allowlist (uitlezen kan enkel root: `sudo cat /etc/coolbx/device-secret`, of via een enrollment-flow).
+- **Pilot/dev:** secret lokaal gegenereerd — registreer het toestel eenmalig in de Focus-device-registratie
+  met **`sudo coolbx-enroll-info`** (JSON: `deviceId`, `deviceClass`, `fde`, `secret`). Het secret is
+  gevoelig: alleen tijdens de enrollment tonen/kopiëren. Registreer de **klasse mee** (`tpm-sealed` of
+  `file-secret`) — de server handhaaft er tiering op (zie onder).
 - **Productie (aanbevolen):** de server deelt het secret bij enrollment uit en zet het meteen in de allowlist;
   het OS bakt het niet, maar ontvangt het via een eenmalige enrollment-call.
+
+## Toestelklassen & tiering (B3.e, F-03-006 / F-03-014)
+
+| Klasse | Secret-opslag | Examen-kiosk |
+|---|---|---|
+| **Tier 1 — `tpm-sealed`** | TPM2-sealed credential (`device-secret.cred`); schijf-uitlezen levert niets op | ja |
+| **Tier 2 — `file-secret`** | plain file `0600 root`; te weren via server-config | alleen als het deployment dat toelaat |
+
+- De klasse wordt door het OS gerapporteerd (`/etc/coolbx/device-class`, `coolbx-enroll-info`) maar de
+  **server vertrouwt uitsluitend zijn eigen register** (klasse gezet bij registratie). Handhaving:
+  `EXAM_MIN_DEVICE_CLASS=tpm-sealed` in het Focus-deployment weigert kiosk-claims van Tier-2-toestellen.
+- **PCR-binding bewust uit** (`--tpm2-pcrs=""`): het credential is aan de TPM-chip (het toestel) gebonden,
+  niet aan de firmware-meetstand — een firmware/SecureBoot-update maakt het secret niet onbruikbaar.
+  Measured-boot-binding (PCR-policy + SecureBoot-beheer) is de volgende hardening-trede.
+
+## FDE — volledige schijfversleuteling (D2-persistentie, Tier 1)
+
+De dev-qcow2 draait zónder FDE (bootc-image-builder ondersteunt geen LUKS-partities in de
+disk-customization). FDE hoort bij de **hardware-installatie**:
+
+```bash
+# Tier-1-installatie op echt hardware (wist de doelschijf!):
+sudo bootc install to-disk --block-setup tpm2-luks /dev/<doelschijf>
+# Na de eerste boot: recovery-key toevoegen (verplicht — zonder failover sluit een
+# TPM/firmware-wijziging het toestel buiten) en veilig bewaren:
+sudo systemd-cryptenroll --recovery-key /dev/<luks-partitie>
+```
+
+Verifieer na installatie met `sudo coolbx-enroll-info` → `"fde": true`. Toestellen zonder TPM krijgen
+geen `tpm2-luks`-pad (Tier 2): geen FDE-autounlock en — bij `EXAM_MIN_DEVICE_CLASS=tpm-sealed` —
+geen examen-kiosk.
 
 ## Fast-follow hardening
 
 - **Relay-resistentie:** bind de challenge aan tijd/sessie (server doet dit al via de nonce); overweeg
   peer-cred-checks op de socket zodat enkel de Focus-extensie-context tekent.
-- **TPM-sealing + FDE:** seal het secret aan de TPM zodat fysieke schijf-diefstal het niet prijsgeeft (ADR-0013).
+- **Measured boot:** PCR-policy-binding van het credential + SecureBoot-beheer (volgende trede na B3.e).
 
 ## Per-examen kiosk-policy (B3.c, Focus-audit F-03-007)
 

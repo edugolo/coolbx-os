@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Coolbx OS — enrollment-info voor registratie bij de Focus-server (B3.e).
+# Print deviceId, toestelklasse, FDE-status en HET SECRET (gevoelig!) als JSON.
+# Root-only: het secret hoort alleen tijdens enrollment even zichtbaar te zijn;
+# de admin registreert deviceId+secret+klasse in de Focus-device-registratie
+# (zie docs/ATTESTATION.md).
+set -euo pipefail
+
+[ "$(id -u)" = "0" ] || { echo "coolbx-enroll-info: root vereist" >&2; exit 1; }
+
+SECRET=/etc/coolbx/device-secret
+CRED=/etc/coolbx/device-secret.cred
+CLASS_FILE=/etc/coolbx/device-class
+
+mid=$(cat /etc/machine-id)
+# Zelfde afleiding als coolbx-attestd: sha256("coolbx:"+machine-id), eerste 32 hex.
+device_id=$(printf 'coolbx:%s' "$mid" | sha256sum | cut -c1-32)
+class=$(cat "$CLASS_FILE" 2>/dev/null || echo file-secret)
+
+if [ -s "$CRED" ]; then
+  secret=$(systemd-creds decrypt --name=coolbx-device-secret "$CRED" -)
+elif [ -s "$SECRET" ]; then
+  secret=$(cat "$SECRET")
+else
+  echo "coolbx-enroll-info: geen device-secret aanwezig (draai coolbx-device-secret.service eerst)" >&2
+  exit 1
+fi
+
+# FDE-status: zit het root-bestandssysteem op een LUKS-crypt-device? (Het
+# subvolume-deel tussen [] van btrfs-bronnen strippen vóór lsblk.)
+fde=false
+root_src=$(findmnt -no SOURCE / 2>/dev/null | sed 's/\[.*//' || true)
+if [ -n "$root_src" ] && lsblk -sno TYPE "$root_src" 2>/dev/null | grep -q '^crypt$'; then
+  fde=true
+fi
+
+printf '{"deviceId":"%s","deviceClass":"%s","fde":%s,"secret":"%s"}\n' \
+  "$device_id" "$class" "$fde" "$secret"

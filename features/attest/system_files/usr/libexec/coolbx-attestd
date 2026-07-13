@@ -22,8 +22,38 @@ import struct
 import subprocess
 
 SECRET_PATH = "/etc/coolbx/device-secret"
+CRED_PATH = "/etc/coolbx/device-secret.cred"
+CRED_NAME = "coolbx-device-secret"
 SOCK_PATH = "/run/coolbx-attest.sock"
 KIOSK_USER = "coolbx-kiosk"
+
+_secret_cache = None
+
+
+def load_secret():
+    """Tier 1 (B3.e): TPM2-sealed credential — in-memory decrypt via
+    systemd-creds; de plaintext raakt nooit de schijf. Tier 2: plain file
+    (0600 root). Gecachet: het secret verandert alleen bij re-enrollment
+    (dan herstart de daemon toch)."""
+    global _secret_cache
+    if _secret_cache:
+        return _secret_cache
+    if os.path.exists(CRED_PATH):
+        try:
+            proc = subprocess.run(
+                ["systemd-creds", "decrypt", "--name=" + CRED_NAME, CRED_PATH, "-"],
+                capture_output=True, timeout=15,
+            )
+        except Exception:
+            return None
+        if proc.returncode == 0 and proc.stdout.strip():
+            _secret_cache = proc.stdout.strip()
+        return _secret_cache
+    try:
+        _secret_cache = open(SECRET_PATH, "rb").read().strip() or None
+    except OSError:
+        return None
+    return _secret_cache
 
 
 def device_id():
@@ -93,9 +123,8 @@ class Handler(socketserver.StreamRequestHandler):
             self.wfile.write((out + "\n").encode("utf-8"))
             return
 
-        try:
-            secret = open(SECRET_PATH, "rb").read().strip()
-        except OSError:
+        secret = load_secret()
+        if not secret:
             self.wfile.write(b'{"error":"no device secret"}\n')
             return
         challenge = str(req.get("challenge", ""))

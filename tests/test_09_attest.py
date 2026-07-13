@@ -9,10 +9,17 @@ EXT_ID = "makdakigkdbicdljgdclgnejachcohag"
 
 
 def test_device_secret_is_root_only(vm):
-    # de leerling-sessie (tester) mag het secret NIET kunnen lezen
-    assert not vm.ssh_ok("test -r /etc/coolbx/device-secret && cat /etc/coolbx/device-secret")
-    perms = vm.ssh_sudo("stat -c '%a %U' /etc/coolbx/device-secret").strip()
+    # B3.e: op een TPM-toestel (de dev-VM heeft swtpm) is het secret TPM2-sealed
+    # (.cred) en bestaat er GEEN plaintext meer; zonder TPM is het een plain
+    # file. Beide vormen zijn 0600 root en voor de leerling-sessie onleesbaar.
+    sealed = vm.ssh_sudo("test -s /etc/coolbx/device-secret.cred && echo ja || echo nee").strip() == "ja"
+    path = "/etc/coolbx/device-secret.cred" if sealed else "/etc/coolbx/device-secret"
+    assert not vm.ssh_ok(f"test -r {path} && cat {path}")
+    perms = vm.ssh_sudo(f"stat -c '%a %U' {path}").strip()
     assert perms == "600 root", f"secret-perms fout: {perms!r}"
+    if sealed:
+        # géén plaintext-restant naast het sealed credential
+        assert vm.ssh_sudo("test -e /etc/coolbx/device-secret && echo ja || echo nee").strip() == "nee"
 
 
 def test_attestd_active_and_socket(vm):

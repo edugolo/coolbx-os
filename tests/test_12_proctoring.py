@@ -6,6 +6,7 @@ verifieert + past de proctoring-gate toe. Dit is exact wat de Focus-server moet 
 """
 import hashlib
 import hmac
+import json
 
 import pytest
 
@@ -25,10 +26,15 @@ def _server_decision(allowlist, device_id, session, signature, nonce=NONCE):
 
 @pytest.fixture(scope="module")
 def enrolled(vm):
-    """Enrollment: de 'server' kent het secret + de deviceId van dit toestel."""
-    secret = vm.ssh_sudo("cat /etc/coolbx/device-secret").strip().encode()
+    """Enrollment: de 'server' kent het secret + de deviceId van dit toestel.
+    Via de echte enrollment-flow (coolbx-enroll-info) — tier-onafhankelijk:
+    sinds B3.e is het secret op TPM-toestellen sealed en bestaat het plain
+    file niet meer."""
+    info = json.loads(vm.ssh_sudo("coolbx-enroll-info").strip().splitlines()[-1])
+    secret = info["secret"].encode()
     did = vm.attest_sign(NONCE).get("deviceId")
     assert did, "kon deviceId niet ophalen"
+    assert did == info["deviceId"], "enroll-info en attestd verschillen van deviceId"
     return {"allowlist": {did: secret}, "device_id": did}
 
 

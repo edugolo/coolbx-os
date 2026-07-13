@@ -3,7 +3,10 @@ Description=Coolbx OS — device-attestatie signing-daemon (HMAC-SHA256)
 Documentation=https://coolbx.be/
 Requires=coolbx-device-secret.service
 After=coolbx-device-secret.service
-ConditionPathExists=/etc/coolbx/device-secret
+# Tier 1: TPM2-sealed credential; Tier 2: plain file. Eén van beide volstaat
+# ('|' = OR-conditie, B3.e).
+ConditionPathExists=|/etc/coolbx/device-secret
+ConditionPathExists=|/etc/coolbx/device-secret.cred
 
 [Service]
 # Draait als root (leest het root-only secret) maar tekent enkel — lekt het secret nooit.

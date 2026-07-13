@@ -96,6 +96,21 @@ dev-vm snapshot="0":
     rm -f /tmp/coolbx-mon.sock /tmp/coolbx-qmp.sock
     SNAP_FLAG=""
     [ "{{ snapshot }}" = "1" ] && SNAP_FLAG="-snapshot"
+    # vTPM (B3.e): swtpm-socket zodat de gast een TPM2 heeft (TPM-sealed secret
+    # e2e-testbaar). TPM-staat persisteert in output/swtpm. Zonder swtpm op de
+    # host start de VM zonder TPM (= Tier-2-gedrag).
+    TPM_FLAGS=""
+    if command -v swtpm >/dev/null 2>&1; then
+      mkdir -p output/swtpm
+      pkill -F /tmp/coolbx-swtpm.pid 2>/dev/null || true
+      rm -f /tmp/coolbx-swtpm.sock /tmp/coolbx-swtpm.pid
+      swtpm socket --tpm2 --tpmstate dir=output/swtpm \
+        --ctrl type=unixio,path=/tmp/coolbx-swtpm.sock \
+        --pid file=/tmp/coolbx-swtpm.pid --terminate --daemon
+      TPM_FLAGS="-chardev socket,id=chrtpm,path=/tmp/coolbx-swtpm.sock -tpmdev emulator,id=tpm0,chardev=chrtpm -device tpm-tis,tpmdev=tpm0"
+    else
+      echo "waarschuwing: swtpm niet gevonden — VM start zonder TPM (Tier 2)"
+    fi
     # Headless maar volledig automatiseerbaar (CI-vriendelijk): screendump via de monitor,
     # input via QMP+virtio-tablet, SSH op :2222, CDP via SSH-tunnel. Geen host-display nodig.
     qemu-system-x86_64 \
@@ -103,7 +118,7 @@ dev-vm snapshot="0":
       -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
       -drive if=pflash,format=raw,file=output/ovmf_vars.fd \
       -drive file=output/qcow2/disk.qcow2,if=virtio,format=qcow2 \
-      $SNAP_FLAG \
+      $SNAP_FLAG $TPM_FLAGS \
       -device virtio-vga,xres=1280,yres=800 -display none \
       -device virtio-tablet-pci \
       -monitor unix:/tmp/coolbx-mon.sock,server,nowait \
@@ -111,7 +126,7 @@ dev-vm snapshot="0":
       -netdev user,id=n0,hostfwd=tcp:127.0.0.1:2222-:22 -device virtio-net-pci,netdev=n0 \
       -serial file:output/serial.log \
       -daemonize -pidfile /tmp/coolbx-vm.pid
-    echo "VM gestart (pid $(cat /tmp/coolbx-vm.pid))${SNAP_FLAG:+ [snapshot-modus: qcow2 read-only]}. 'just vm-shot' voor screenshot, 'just vm-ssh' voor shell."
+    echo "VM gestart (pid $(cat /tmp/coolbx-vm.pid))${SNAP_FLAG:+ [snapshot-modus: qcow2 read-only]}${TPM_FLAGS:+ [vTPM]}. 'just vm-shot' voor screenshot, 'just vm-ssh' voor shell."
 
 # Start de dev-VM met een ZICHTBAAR venster (gtk op de wayland-sessie) i.p.v. headless.
 # Je ziet de VM live draaien; screenshots/SSH blijven werken via de monitor-socket en :2222.
@@ -129,11 +144,25 @@ dev-vm-gui:
     rm -f /tmp/coolbx-mon.sock
     export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
     export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/1000}"
+    # vTPM (B3.e) — zie dev-vm.
+    TPM_FLAGS=""
+    if command -v swtpm >/dev/null 2>&1; then
+      mkdir -p output/swtpm
+      pkill -F /tmp/coolbx-swtpm.pid 2>/dev/null || true
+      rm -f /tmp/coolbx-swtpm.sock /tmp/coolbx-swtpm.pid
+      swtpm socket --tpm2 --tpmstate dir=output/swtpm \
+        --ctrl type=unixio,path=/tmp/coolbx-swtpm.sock \
+        --pid file=/tmp/coolbx-swtpm.pid --terminate --daemon
+      TPM_FLAGS="-chardev socket,id=chrtpm,path=/tmp/coolbx-swtpm.sock -tpmdev emulator,id=tpm0,chardev=chrtpm -device tpm-tis,tpmdev=tpm0"
+    else
+      echo "waarschuwing: swtpm niet gevonden — VM start zonder TPM (Tier 2)"
+    fi
     qemu-system-x86_64 \
       -enable-kvm -machine q35 -cpu host -m 4096 -smp 4 \
       -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
       -drive if=pflash,format=raw,file=output/ovmf_vars.fd \
       -drive file=output/qcow2/disk.qcow2,if=virtio,format=qcow2 \
+      $TPM_FLAGS \
       -device virtio-vga,xres=1280,yres=800 -display gtk,show-cursor=on,zoom-to-fit=on \
       -device virtio-tablet-pci \
       -monitor unix:/tmp/coolbx-mon.sock,server,nowait \
@@ -286,10 +315,11 @@ e2e *pytest_args:
     fi
     python3 -m pytest tests/ -v {{ pytest_args }}
 
-# Stop de dev-VM.
+# Stop de dev-VM (en de bijhorende swtpm; --terminate ruimt die meestal al op).
 vm-stop:
     -kill "$(cat /tmp/coolbx-vm.pid 2>/dev/null)" 2>/dev/null || true
-    -rm -f /tmp/coolbx-vm.pid /tmp/coolbx-mon.sock /tmp/coolbx-qmp.sock
+    -pkill -F /tmp/coolbx-swtpm.pid 2>/dev/null || true
+    -rm -f /tmp/coolbx-vm.pid /tmp/coolbx-mon.sock /tmp/coolbx-qmp.sock /tmp/coolbx-swtpm.sock /tmp/coolbx-swtpm.pid
 
 # Shellcheck op alle build-scripts.
 lint:
