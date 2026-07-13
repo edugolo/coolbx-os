@@ -80,7 +80,9 @@ build-qcow2 tag=default_tag:
     echo ">> klaar: output/qcow2/disk.qcow2"
 
 # Start de dev-VM headless (qemu-direct, UEFI). SSH op :2222, monitor-socket voor screenshots.
-dev-vm:
+# `just dev-vm 1` start met -snapshot: alle schrijfacties naar een tijdelijke overlay,
+# de qcow2 blijft onaangeroerd (e2e-runs muteren de image dan niet meer — F-06-008).
+dev-vm snapshot="0":
     #!/usr/bin/env bash
     set -euo pipefail
     test -f output/qcow2/disk.qcow2 || { echo "Bouw eerst: just build-qcow2"; exit 1; }
@@ -92,6 +94,8 @@ dev-vm:
     [ -n "$OVMF_CODE" ] || { echo "OVMF niet gevonden — installeer edk2-ovmf"; exit 1; }
     cp -f "$OVMF_VARS_SRC" output/ovmf_vars.fd
     rm -f /tmp/coolbx-mon.sock /tmp/coolbx-qmp.sock
+    SNAP_FLAG=""
+    [ "{{ snapshot }}" = "1" ] && SNAP_FLAG="-snapshot"
     # Headless maar volledig automatiseerbaar (CI-vriendelijk): screendump via de monitor,
     # input via QMP+virtio-tablet, SSH op :2222, CDP via SSH-tunnel. Geen host-display nodig.
     qemu-system-x86_64 \
@@ -99,6 +103,7 @@ dev-vm:
       -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
       -drive if=pflash,format=raw,file=output/ovmf_vars.fd \
       -drive file=output/qcow2/disk.qcow2,if=virtio,format=qcow2 \
+      $SNAP_FLAG \
       -device virtio-vga,xres=1280,yres=800 -display none \
       -device virtio-tablet-pci \
       -monitor unix:/tmp/coolbx-mon.sock,server,nowait \
@@ -106,7 +111,7 @@ dev-vm:
       -netdev user,id=n0,hostfwd=tcp:127.0.0.1:2222-:22 -device virtio-net-pci,netdev=n0 \
       -serial file:output/serial.log \
       -daemonize -pidfile /tmp/coolbx-vm.pid
-    echo "VM gestart (pid $(cat /tmp/coolbx-vm.pid)). 'just vm-shot' voor screenshot, 'just vm-ssh' voor shell."
+    echo "VM gestart (pid $(cat /tmp/coolbx-vm.pid))${SNAP_FLAG:+ [snapshot-modus: qcow2 read-only]}. 'just vm-shot' voor screenshot, 'just vm-ssh' voor shell."
 
 # Start de dev-VM met een ZICHTBAAR venster (gtk op de wayland-sessie) i.p.v. headless.
 # Je ziet de VM live draaien; screenshots/SSH blijven werken via de monitor-socket en :2222.
@@ -162,16 +167,37 @@ vm-type text:
 vm-ssh *args:
     sshpass -p tester ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2222 tester@127.0.0.1 {{ args }}
 
-# Wacht tot de VM via SSH bereikbaar is (default 120s). Exit !=0 bij timeout.
-vm-wait timeout="120":
+# Wacht tot de VM via SSH bereikbaar is (default 120s). Detecteert de bekende
+# boot-flake (hang vóór de kernel, bv. in het UEFI-menu: geen kernel-output op
+# serial) en reset de VM dan automatisch, max `resets` keer (F-06-008).
+vm-wait timeout="120" resets="2":
     #!/usr/bin/env bash
     set -uo pipefail
-    for i in $(seq 1 {{ timeout }}); do
-      if sshpass -p tester ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=2 -p 2222 tester@127.0.0.1 true 2>/dev/null; then
-        echo "VM up na ${i}s"; exit 0
-      fi; sleep 1
+    SERIAL=output/serial.log
+    KERNEL_WINDOW=45
+    try_ssh() { sshpass -p tester ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=2 -p 2222 tester@127.0.0.1 true 2>/dev/null; }
+    # Alleen serial-output van de HUIDIGE boot-poging telt (offset per reset).
+    kernel_seen() { tail -c +$((OFFSET + 1)) "$SERIAL" 2>/dev/null | grep -qE 'Linux version|systemd\[1\]'; }
+    OFFSET=0
+    for attempt in $(seq 0 {{ resets }}); do
+      waited=0
+      while [ "$waited" -lt {{ timeout }} ]; do
+        if try_ssh; then echo "VM up na ${waited}s (boot-poging $((attempt + 1)))"; exit 0; fi
+        sleep 1; waited=$((waited + 1))
+        # Geen kernel-output binnen het venster → boot hangt vóór Linux (flake).
+        if [ "$waited" -ge "$KERNEL_WINDOW" ] && ! kernel_seen; then break; fi
+      done
+      if [ "$attempt" -lt {{ resets }} ]; then
+        if kernel_seen; then
+          echo ">> kernel bootte maar SSH kwam niet op binnen {{ timeout }}s — reset ($((attempt + 1))/{{ resets }})"
+        else
+          echo ">> boot-flake: geen kernel-output na ${KERNEL_WINDOW}s — reset ($((attempt + 1))/{{ resets }})"
+        fi
+        OFFSET=$(stat -c%s "$SERIAL" 2>/dev/null || echo 0)
+        python3 scripts/vm-input.py reset || true
+      fi
     done
-    echo "VM kwam niet up binnen {{ timeout }}s — zie output/serial.log"; exit 1
+    echo "VM kwam niet up (na $(( {{ resets }} + 1 )) boot-pogingen) — zie output/serial.log"; exit 1
 
 # Machine-leesbare smoke-test tegen de draaiende VM. Exit !=0 bij falen (voor de autonome loop).
 check:
@@ -250,18 +276,20 @@ vm-find-click text:
 
 # Draai de volledige e2e-suite tegen de VM (start 'm headless als hij nog niet draait).
 # Lagen A/B/C/D uit ADR-0020. Vereist: just dev-vm (qcow2) + 'just ocr-build' (eenmalig).
+# Een zelf-gestarte VM draait in -snapshot-modus: de qcow2 blijft onaangeroerd en elke
+# run begint met identieke disk-staat (F-06-008). Een al-draaiende VM wordt hergebruikt.
 e2e *pytest_args:
     #!/usr/bin/env bash
     set -uo pipefail
     if ! { [ -f /tmp/coolbx-vm.pid ] && kill -0 "$(cat /tmp/coolbx-vm.pid 2>/dev/null)" 2>/dev/null; }; then
-      echo ">> geen VM actief — start headless dev-vm"; just dev-vm; just vm-wait 180
+      echo ">> geen VM actief — start headless dev-vm (snapshot-modus)"; just dev-vm 1; just vm-wait 180
     fi
     python3 -m pytest tests/ -v {{ pytest_args }}
 
 # Stop de dev-VM.
 vm-stop:
     -kill "$(cat /tmp/coolbx-vm.pid 2>/dev/null)" 2>/dev/null || true
-    -rm -f /tmp/coolbx-vm.pid /tmp/coolbx-mon.sock
+    -rm -f /tmp/coolbx-vm.pid /tmp/coolbx-mon.sock /tmp/coolbx-qmp.sock
 
 # Shellcheck op alle build-scripts.
 lint:

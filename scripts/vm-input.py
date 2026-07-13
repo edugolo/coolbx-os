@@ -12,6 +12,7 @@ Gebruik:
   vm-input.py dblclick X Y [--size WxH]
   vm-input.py key <qcode> [<qcode> ...]   # bv. 'ret' 'esc' 'ctrl-alt-f3'
   vm-input.py type "tekst"                # tikt letterlijke tekst (us-layout)
+  vm-input.py reset                       # harde VM-reset (QMP system_reset)
 """
 import json
 import os
@@ -143,6 +144,11 @@ def main():
                 time.sleep(0.03)
         q.close()
         print("type:", args[0])
+    elif cmd == "reset":
+        q = QmpClient(QMP_SOCK)
+        q.cmd("system_reset")
+        q.close()
+        print("reset")
     else:
         print(__doc__)
         sys.exit(2)
