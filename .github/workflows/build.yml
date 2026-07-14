@@ -40,7 +40,7 @@ jobs:
       # Tags: stable channel + dated + (on PR) a sha tag. Canary :testing is promoted manually.
       - name: Image metadata
         id: meta
-        uses: docker/metadata-action@c1e51972afc2121e065aed6d45c65596fe445f3f # v5
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
         with:
           images: ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
@@ -145,7 +145,7 @@ jobs:
       # de sudo-podman-runtime), wel docker/login-action.
       - name: Login to GHCR (cosign)
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
