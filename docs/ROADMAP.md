@@ -280,7 +280,7 @@ btrfs aankan, anders ext4 forceren; draai ≥1 ext4-build in de loop). Validatie
 (no-op zolang placeholder → veilig default, geen rebuild nodig om te activeren). Rol via `/usr/share/coolbx/ansible/laptop-group`
 (default `leerlingen`) → meegegeven als `coolbx_group`-extra-var zodat `local.yml` per rol vertakt. **Strak gescoped**
 (test bewaakt: geen dnf/rpm/bootc in de puller). Mechaniek bewezen: pull → apply → **idempotent** (`changed=1`→`changed=0`).
-⏳ **Jouw kant:** de echte playbook-repo (`github.com/edugolo/coolbx-ansible` met `local.yml`) + de URL in `ansible.conf`/ansible
+⏳ **Jouw kant:** de echte playbook-repo (`github.com/coolbx/coolbx-ansible` met `local.yml`) + de URL in `ansible.conf`/ansible
 zetten. Groepstoewijzing per toestel (FOG/host_vars/handmatig) — `[te bevestigen]`.
 
 ### Fase 7 — Branding (play↔focus)

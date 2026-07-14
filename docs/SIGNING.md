@@ -7,7 +7,7 @@ ingebakken publieke sleutel.
 > **Status (B3.d, 2026-07-12):** de CI signt elke push nu VERPLICHT **keyless**
 > (Fulcio/Rekor via GitHub-OIDC — faalt de signing, dan faalt de build): publieke
 > transparantie zonder sleutelbeheer, verifieerbaar met
-> `cosign verify --certificate-identity-regexp 'github.com/edugolo/coolbx-os' --certificate-oidc-issuer https://token.actions.githubusercontent.com <image>@<digest>`.
+> `cosign verify --certificate-identity-regexp 'github.com/coolbx/coolbx-os' --certificate-oidc-issuer https://token.actions.githubusercontent.com <image>@<digest>`.
 > **On-device enforcement** (bootc/policy.json) kan keyless-identiteiten van GitHub
 > Actions echter NIET verifiëren (containers-policy fulcio ondersteunt alleen
 > `subjectEmail`, geen URI-SAN's) — het toestel-verify-pad is daarom de

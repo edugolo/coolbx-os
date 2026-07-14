@@ -112,9 +112,9 @@ De CI bouwt bij elke push naar `main` én dagelijks (CVE-doorstroom vanuit fedor
 **productie-image** — zonder dev-testuser, mét DevTools-/`file://`-hardening — en pusht naar:
 
 ```
-ghcr.io/edugolo/coolbx-os:stable            # het vloot-kanaal
-ghcr.io/edugolo/coolbx-os:stable.YYYYMMDD   # gedateerde tag (pinnen/terugkijken)
-ghcr.io/edugolo/coolbx-os:testing           # canary-ring — handmatige promotie
+ghcr.io/coolbx/coolbx-os:stable            # het vloot-kanaal
+ghcr.io/coolbx/coolbx-os:stable.YYYYMMDD   # gedateerde tag (pinnen/terugkijken)
+ghcr.io/coolbx/coolbx-os:testing           # canary-ring — handmatige promotie
 ```
 
 De gepubliceerde image bevat de features `kiosk branding hardware fleet attest managed apps
@@ -129,9 +129,9 @@ Verifieer een image vanaf je beheermachine (zie `docs/SIGNING.md` voor context):
 
 ```bash
 cosign verify \
-  --certificate-identity-regexp 'github.com/edugolo/coolbx-os' \
+  --certificate-identity-regexp 'github.com/coolbx/coolbx-os' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  ghcr.io/edugolo/coolbx-os@<digest>
+  ghcr.io/coolbx/coolbx-os@<digest>
 ```
 
 **On-device enforcement** (het toestel weigert zélf ongesigneerde updates via
@@ -289,8 +289,8 @@ Zet een handvol testtoestellen op de canary-tag en promoveer pas daarna handmati
 (ROADMAP: greenboot vangt alleen boot-crashes, niet "extensie laadt niet meer"):
 
 ```bash
-sudo bootc switch ghcr.io/edugolo/coolbx-os:testing   # toestel → canary-ring
-sudo bootc switch ghcr.io/edugolo/coolbx-os:stable    # terug naar het vloot-kanaal
+sudo bootc switch ghcr.io/coolbx/coolbx-os:testing   # toestel → canary-ring
+sudo bootc switch ghcr.io/coolbx/coolbx-os:stable    # terug naar het vloot-kanaal
 ```
 
 (Voorwaarde: de `:testing`-tag wordt effectief gepubliceerd — zie §3, **[TE VERIFIËREN]**.)
