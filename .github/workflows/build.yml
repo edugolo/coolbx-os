@@ -80,7 +80,7 @@ jobs:
 
       # Login als ROOT (de push draait via sudo podman). NB: rootless `podman login` hier mixen met de
       # sudo-podman-operaties breekt de rootless runtime (/run/user/$UID/containers niet schrijfbaar).
-      # Cosign-signing (nu inactief) heeft later eigen auth nodig → aanpakken bij signing-activatie.
+      # Cosign heeft eigen auth (docker/login-action, verderop) — deze root-login ziet cosign niet.
       - name: Login to GHCR
         if: github.event_name != 'pull_request'
         run: echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login ghcr.io -u "${{ github.actor }}" --password-stdin
@@ -140,6 +140,17 @@ jobs:
       #     (fulcio-verificatie ondersteunt alleen subjectEmail), dus on-device
       #     enforcement draait op de cosign-keypair (register-fallback). Activeert
       #     zodra het secret bestaat; zie docs/SIGNING.md.
+      # Cosign draait als runner-user en leest ~/.docker/config.json — de sudo-podman-login
+      # hierboven (root-auth) is voor cosign onzichtbaar. Geen rootless podman login (breekt
+      # de sudo-podman-runtime), wel docker/login-action.
+      - name: Login to GHCR (cosign)
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Install cosign (keyless)
         if: github.event_name != 'pull_request'
         uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3.9.2
