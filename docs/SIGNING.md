@@ -25,9 +25,9 @@ ingebakken publieke sleutel.
    ```
 2. **Private key → GitHub repo-secret** `SIGNING_SECRET` (inhoud van `cosign.key`).
    De workflow `.github/workflows/build.yml` gebruikt die al (`secrets.SIGNING_SECRET`).
-3. **Public key → repo + image:** commit `cosign.pub` in de repo-root, en bak 'm in het image als
-   `/etc/pki/containers/coolbx-os.pub` (zie `features/fleet/install.sh` — de gate activeert dit zodra
-   een echte `cosign.pub` aanwezig is i.p.v. de placeholder).
+3. **Public key → repo + image:** commit `cosign.pub` als `features/fleet/cosign.pub` (het pad dat
+   de gate in `features/fleet/install.sh` leest); die bakt 'm in het image als
+   `/etc/pki/containers/coolbx-os.pub` zodra er een echte sleutel staat i.p.v. de placeholder.
 4. **Bevestig dat de CI gesigneerde images pusht** (main/cron → `cosign sign -y --key … @<digest>`).
 
 ## On-device activeren (na stap 1-4)
@@ -50,5 +50,5 @@ naast de oude, rol uit, en verwijder de oude pas als de hele vloot de nieuwe pol
 
 ## Verificatie
 
-- CI: de `Sign by digest`-stap slaagt en `cosign verify --key cosign.pub <ref>` lukt.
+- CI: de `Sign by digest`-stap slaagt en `cosign verify --key features/fleet/cosign.pub <ref>` lukt.
 - Toestel: `bootc upgrade` accepteert de gesigneerde image; een ongetekende/getamperde push → `reject`.
